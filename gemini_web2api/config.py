@@ -17,7 +17,7 @@ DEFAULT_CONFIG = {
     "api_keys": [],
     "admin_password": "sk-admin",
     "force_non_stream": False,
-    "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+    "empty_response_fallback": "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。",
 }
 
 CONFIG = dict(DEFAULT_CONFIG)

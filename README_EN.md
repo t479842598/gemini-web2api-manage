@@ -182,7 +182,7 @@ Create `config.json` in the same directory:
   "proxy": null,
   "default_model": "gemini-3.5-flash",
   "public_base_url": null,
-  "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+  "empty_response_fallback": "Gemini returned empty content. Possible causes: invalid Cookie, content blocked by safety policy, overly long context, or a temporarily unavailable model. Check empty-response diagnostics in the admin logs and retry.",
   "log_requests": true
 }
 ```

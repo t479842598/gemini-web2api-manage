@@ -182,7 +182,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
   "proxy": null,
   "default_model": "gemini-3.5-flash",
   "public_base_url": null,
-  "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+  "empty_response_fallback": "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。",
   "log_requests": true
 }
 ```

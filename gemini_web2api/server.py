@@ -24,7 +24,7 @@ def _usage(prompt: str, text: str) -> dict:
 
 def _empty_response_fallback() -> str:
     return CONFIG.get("empty_response_fallback") or (
-        "Upstream returned an empty response. Please adjust the prompt or try again."
+        "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。"
     )
 
 
@@ -416,6 +416,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
         if tools and text and tool_choice != "none":
             text, tool_calls = parse_tool_calls(text)
         if not text and not tool_calls:
+            log(
+                "空响应诊断: endpoint=/v1/chat/completions "
+                f"model={model_name} prompt_len={len(prompt)} stream={stream} "
+                f"tools={bool(tools)} images={len(images or [])} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
+            )
             text = _empty_response_fallback()
         msg = {"role": "assistant", "content": text or None}
         if tool_calls:
@@ -511,6 +516,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
         if tools and text and tool_choice != "none":
             text, tool_calls = parse_tool_calls(text)
         if not text and not tool_calls:
+            log(
+                "空响应诊断: endpoint=/v1/responses "
+                f"model={model_name} prompt_len={len(prompt)} stream={bool(req.get('stream')) and _stream_allowed()} "
+                f"tools={bool(tools)} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
+            )
             text = _empty_response_fallback()
 
         rid = f"resp_{uuid.uuid4().hex[:16]}"
@@ -611,7 +621,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
             return
 
         if not text:
-            log("Warning: empty response from Gemini")
+            log(
+                "空响应诊断: endpoint=/v1beta/models "
+                f"model={model_name} prompt_len={len(prompt)} stream={stream} "
+                f"tools={has_tools} images={len(images or [])} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
+            )
 
         response_parts = []
         if has_tools and text:

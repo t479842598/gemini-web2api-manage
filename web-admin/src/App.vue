@@ -625,7 +625,7 @@ onBeforeUnmount(() => {
               </div>
             </section>
 
-            <section v-show="active === 'chat'" class="content-grid">
+            <section v-show="active === 'chat'" class="content-grid chat-section">
               <div class="panel span-8 chat-panel">
                 <div class="panel-head"><h2 class="panel-title">对话</h2><NSpace align="center" wrap><NTag type="info" round>{{ config.force_non_stream ? '全局非流式' : (chat.stream ? '流式请求' : '非流式请求') }}</NTag><NButton secondary @click="chat.messages = []"><template #icon><NIcon :component="TrashOutline" /></template>清空</NButton></NSpace></div>
                 <div class="chat-list">

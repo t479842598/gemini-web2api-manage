@@ -59,7 +59,7 @@ DEFAULT_CONFIG = {
     "cookie_file": None,
     "cookie_files": [],
     "proxy": None,
-    "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+    "empty_response_fallback": "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。",
     "admin_password": "sk-admin",
     "force_non_stream": False,
 }
@@ -415,7 +415,7 @@ def parse_tool_calls(text: str) -> tuple:
 
 def empty_response_fallback() -> str:
     return CONFIG.get("empty_response_fallback") or (
-        "Upstream returned an empty response. Please adjust the prompt or try again."
+        "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。"
     )
 
 
@@ -772,6 +772,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
         msg = {"role": "assistant", "content": text or None}
         if not text and not tool_calls:
+            log(
+                "空响应诊断: endpoint=/v1/chat/completions "
+                f"model={model_name} prompt_len={len(prompt)} stream={stream} "
+                f"tools={bool(tools)} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
+            )
             text = empty_response_fallback()
             msg["content"] = text
         if tool_calls:
@@ -863,6 +868,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
             return
 
         if not text and not tool_calls:
+            log(
+                "空响应诊断: endpoint=/v1/responses "
+                f"model={model_name} prompt_len={len(prompt)} stream={bool(req.get('stream')) and stream_allowed()} "
+                f"tools={bool(tools)} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
+            )
             text = empty_response_fallback()
 
         rid = f"resp_{uuid.uuid4().hex[:16]}"

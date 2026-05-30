@@ -303,10 +303,21 @@ textarea { font: inherit; }
 .log-box { min-height: calc(100vh - 230px); }
 .compact-code { min-height: 120px; max-height: none; }
 
-.chat-panel { display: grid; gap: 14px; }
+.chat-section {
+  height: calc(100vh - 120px);
+  min-height: 560px;
+  align-items: stretch;
+}
+.chat-section > .panel { min-height: 0; }
+.chat-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 14px;
+  min-height: 0;
+}
 .chat-list {
-  min-height: 320px;
-  max-height: calc(100vh - 360px);
+  min-height: 0;
+  max-height: none;
   overflow: auto;
   display: grid;
   align-content: start;
@@ -349,6 +360,8 @@ textarea { font: inherit; }
   .span-6,
   .span-4 { grid-column: span 12; }
   .network-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chat-section { height: auto; min-height: 0; }
+  .chat-list { min-height: 320px; max-height: 60vh; }
 }
 
 @media (max-width: 720px) {

@@ -142,6 +142,13 @@ def clean_text(text: str) -> str:
     return text.strip()
 
 
+def response_snippet(value: str, limit: int = 600) -> str:
+    value = re.sub(r"\s+", " ", value or "").strip()
+    if len(value) > limit:
+        return value[:limit] + "..."
+    return value
+
+
 def _extract_texts_from_line(line: str) -> list:
     """Parse a single wrb.fr line and return list of text strings found."""
     if '"wrb.fr"' not in line or len(line) < 200:
@@ -195,12 +202,18 @@ def generate(prompt: str, model_id: int, think_mode: int, file_refs: list = None
                 resp = opener.open(req, timeout=CONFIG["request_timeout_sec"])
             else:
                 resp = urllib.request.urlopen(req, context=ctx, timeout=CONFIG["request_timeout_sec"])
+            status = getattr(resp, "status", getattr(resp, "code", None))
             raw = resp.read().decode("utf-8", errors="replace")
             text = extract_response_text(raw)
             if text:
                 return text
+            log(
+                "空响应诊断: 协议=non-stream "
+                f"model_id={model_id} think_mode={think_mode} prompt_len={len(prompt)} "
+                f"upstream_status={status} raw_len={len(raw)} raw_snippet={response_snippet(raw)}"
+            )
             if HAS_HTTPX:
-                log("Empty non-stream parse; retrying with streaming collector")
+                log("空响应诊断: 非流式解析为空，尝试使用流式收集器重试")
                 return collect_stream_text(prompt, model_id, think_mode, file_refs)
             return ""
         except Exception as e:
@@ -237,18 +250,29 @@ def generate_stream(prompt: str, model_id: int, think_mode: int, file_refs: list
     for attempt in range(CONFIG["retry_attempts"]):
         try:
             prev_text = ""
+            status = None
+            sample = []
             with client.stream("POST", url, content=body, headers=headers) as resp:
+                status = resp.status_code
                 buf = ""
                 for chunk in resp.iter_text():
                     buf += chunk
                     while "\n" in buf:
                         line, buf = buf.split("\n", 1)
+                        if len(sample) < 4 and line.strip():
+                            sample.append(line.strip())
                         for t in _extract_texts_from_line(line):
                             if len(t) > len(prev_text):
                                 delta = clean_text(t[len(prev_text):])
                                 if delta:
                                     yield delta
                                 prev_text = t
+            if not prev_text:
+                log(
+                    "空响应诊断: 协议=stream "
+                    f"model_id={model_id} think_mode={think_mode} prompt_len={len(prompt)} "
+                    f"upstream_status={status} raw_snippet={response_snippet(' '.join(sample))}"
+                )
             return
         except Exception as e:
             last_err = e
