@@ -500,15 +500,41 @@ def chat_stream_chunk(cid: str, model_name: str, delta: dict, finish_reason=None
 
 # ─── HTTP Handler ────────────────────────────────────────────────────────────
 
+MAX_BODY_SIZE = 10 * 1024 * 1024  # 10 MB
+
+_login_attempts = {}  # ip -> (count, first_attempt_time)
+LOGIN_RATE_LIMIT = 5
+LOGIN_RATE_WINDOW = 300  # seconds
+
+
 class GeminiHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         log(fmt % args)
+
+    def _is_admin_path(self) -> bool:
+        return self.path.startswith("/admin")
+
+    def _cors_origin(self) -> str:
+        if self._is_admin_path():
+            return self.headers.get("Origin") or "null"
+        return "*"
+
+    def _authorized(self):
+        keys = CONFIG.get("api_keys") or []
+        if not keys:
+            return True
+        auth = self.headers.get("Authorization", "")
+        key = auth[7:] if auth.startswith("Bearer ") else self.headers.get("x-api-key", "")
+        if not key:
+            return False
+        import hmac as _hmac
+        return any(_hmac.compare_digest(key, k) for k in keys)
 
     def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         for key, value in (headers or {}).items():
             self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
@@ -521,16 +547,16 @@ class GeminiHandler(BaseHTTPRequestHandler):
     def send_bytes(self, body: bytes, content_type: str, status=200):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Origin", self._cors_origin())
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "*")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
         self.end_headers()
 
     def _admin_authorized(self):
@@ -546,6 +572,9 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
+            if (path.startswith("/v1/") or path.startswith("/v1beta/")) and not self._authorized():
+                self.send_json({"error": {"message": "invalid api key"}}, 401)
+                return
             if path in ("/admin", "/admin/"):
                 self.send_html(read_admin_index())
             elif path == "/admin/api/auth":
@@ -593,7 +622,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             parsed = urllib.parse.urlparse(self.path)
             path = parsed.path
+            if (path.startswith("/v1/") or path.startswith("/v1beta/") or ":generateContent" in path or ":streamGenerateContent" in path) and not self._authorized():
+                self.send_json({"error": {"message": "invalid api key"}}, 401)
+                return
             length = int(self.headers.get("Content-Length", 0))
+            if length > MAX_BODY_SIZE:
+                self.send_json({"error": {"message": "request body too large"}}, 413)
+                return
             body = self.rfile.read(length) if length else b""
             if path == "/admin/api/login":
                 self._handle_admin_login(body)
@@ -618,8 +653,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         except Exception as e:
             log(f"POST error: {e}")
             try:
-                self.send_json({"error": {"message": str(e)}}, 500)
-            except:
+                self.send_json({"error": {"message": "internal server error"}}, 500)
+            except Exception:
                 pass
 
     def _handle_admin_status(self):
@@ -660,10 +695,21 @@ class GeminiHandler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, ValueError):
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
             return
+        client_ip = self.client_address[0]
+        now = time.time()
+        count, first_time = _login_attempts.get(client_ip, (0, now))
+        if now - first_time > LOGIN_RATE_WINDOW:
+            count, first_time = 0, now
+        if count >= LOGIN_RATE_LIMIT:
+            self.send_json({"error": {"message": "too many login attempts, try again later"}}, 429)
+            return
         if not verify_admin_password(CONFIG, req.get("password", "")):
+            _login_attempts[client_ip] = (count + 1, first_time)
             self.send_json({"error": {"message": "invalid admin password"}}, 401)
             return
-        self.send_json({"ok": True}, headers={"Set-Cookie": make_admin_cookie(CONFIG)})
+        _login_attempts.pop(client_ip, None)
+        is_https = (self.headers.get("X-Forwarded-Proto") or "").lower() == "https"
+        self.send_json({"ok": True}, headers={"Set-Cookie": make_admin_cookie(CONFIG, secure=is_https)})
 
     def _handle_admin_config(self, body: bytes):
         try:
@@ -767,7 +813,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             text, tool_calls = self._call_gemini(prompt, model_id, think_mode, tools)
         except Exception as e:
-            self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
+            log(f"upstream error: {e}")
+            self.send_json({"error": {"message": "upstream error"}}, 502)
             return
 
         msg = {"role": "assistant", "content": text or None}
@@ -864,7 +911,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             text, tool_calls = self._call_gemini(prompt, model_id, think_mode, tools)
         except Exception as e:
-            self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
+            log(f"upstream error: {e}")
+            self.send_json({"error": {"message": "upstream error"}}, 502)
             return
 
         if not text and not tool_calls:
@@ -978,7 +1026,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             text, _ = self._call_gemini(prompt, model_id, think_mode, None)
         except Exception as e:
-            self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
+            log(f"upstream error: {e}")
+            self.send_json({"error": {"message": "upstream error"}}, 502)
             return
 
         candidate = {

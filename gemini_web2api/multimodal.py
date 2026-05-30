@@ -1,13 +1,31 @@
 """Multimodal: image upload via Gemini ProcessFile RPC."""
+import ipaddress
 import json
 import base64
 import urllib.request
 import urllib.parse
 import time
+import socket
 import ssl
 
 from .config import CONFIG
 from .gemini import load_cookie, make_sapisidhash, _get_ssl_ctx, log
+
+
+def _is_safe_url(url: str) -> bool:
+    """Reject URLs that resolve to private/loopback addresses (SSRF protection)."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        for info in socket.getaddrinfo(hostname, None):
+            addr = ipaddress.ip_address(info[4][0])
+            if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+                return False
+    except (socket.gaierror, ValueError, OSError):
+        return False
+    return True
 
 
 def upload_image(image_bytes: bytes, filename: str = "image.png", mime_type: str = "image/png") -> str:
@@ -89,7 +107,10 @@ def _parse_process_file_response(raw: str) -> str:
 
 
 def fetch_image_bytes(url: str) -> bytes:
-    """Fetch image from URL."""
+    """Fetch image from URL with SSRF protection."""
+    if not _is_safe_url(url):
+        log(f"Image fetch blocked (private/reserved address): {url}")
+        return b""
     try:
         resp = urllib.request.urlopen(url, timeout=30)
         return resp.read()

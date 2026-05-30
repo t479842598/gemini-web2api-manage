@@ -109,12 +109,15 @@ def _session_signature(config: dict, expires: str, nonce: str) -> str:
     return hmac.new(secret, f"{expires}:{nonce}".encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def make_admin_cookie(config: dict, max_age: int = 7 * 24 * 3600) -> str:
+def make_admin_cookie(config: dict, max_age: int = 7 * 24 * 3600, secure: bool = False) -> str:
     expires = str(int(time.time()) + max_age)
     nonce = hashlib.sha256(os.urandom(24)).hexdigest()[:24]
     signature = _session_signature(config, expires, nonce)
     value = f"{expires}.{nonce}.{signature}"
-    return f"gw_admin={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
+    cookie = f"gw_admin={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
+    if secure:
+        cookie += "; Secure"
+    return cookie
 
 
 def clear_admin_cookie() -> str:
@@ -144,7 +147,15 @@ def verify_admin_cookie(config: dict, cookie_header: str) -> bool:
     return hmac.compare_digest(signature, expected)
 
 
+def _mask_key(key: str) -> str:
+    if len(key) <= 8:
+        return key[:2] + "*" * (len(key) - 2)
+    return key[:4] + "*" * (len(key) - 8) + key[-4:]
+
+
 def admin_config_payload(config: dict) -> dict:
+    raw_keys = config.get("api_keys") or []
+    masked_keys = [_mask_key(k) for k in raw_keys]
     return {
         "cookie_file": config.get("cookie_file") or "",
         "cookie_files": config.get("cookie_files") or ([config.get("cookie_file")] if config.get("cookie_file") else []),
@@ -155,7 +166,7 @@ def admin_config_payload(config: dict) -> dict:
         "default_model": config.get("default_model") or "",
         "public_base_url": config.get("public_base_url") or "",
         "empty_response_fallback": config.get("empty_response_fallback") or "",
-        "api_keys": config.get("api_keys") or [],
+        "api_keys": masked_keys,
         "force_non_stream": bool(config.get("force_non_stream")),
         "admin_password_set": bool(admin_password(config)),
     }
