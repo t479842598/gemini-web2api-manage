@@ -4,7 +4,7 @@
   <img src="logo.png" width="200" alt="gemini-web2api logo">
 </p>
 
-[English](README.md)
+[English](README_EN.md)
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 

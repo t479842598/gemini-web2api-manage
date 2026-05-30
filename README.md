@@ -4,63 +4,63 @@
   <img src="logo.png" width="200" alt="gemini-web2api logo">
 </p>
 
-[中文文档](README_CN.md)
+[English](README_EN.md)
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
-Convert Google Gemini's web interface into an OpenAI-compatible API. Zero authentication, zero cost, cross-platform.
+将 Google Gemini 网页端转换为 OpenAI 兼容 API. 零认证, 零成本, 跨平台.
 
-## Features
+## 特性
 
-- **Optional API Keys**: no auth when `api_keys` is empty, OpenAI-style Bearer auth when configured
-- **OpenAI Compatible**: Drop-in replacement for `/v1/chat/completions` and `/v1/models`
-- **Tool Calling**: Full function calling support (OpenAI format)
-- **Multiple Models**: Flash, Flash Thinking (20k+ char output), Pro, Auto, Lite
-- **Thinking Depth**: Adjustable via `@think=N` suffix (0=deepest, 4=shallowest)
-- **Web Search**: Built-in internet access (Gemini's native search)
-- **Cross-Platform**: Pure Python, no dependencies beyond stdlib
-- **Streaming**: SSE streaming support
-- **Codex CLI**: Responses API (`/v1/responses`) for OpenAI Codex integration
-- **Gemini CLI**: Google native API (`/v1beta/models`) for Gemini CLI compatibility
-- **Web Admin Console**: Vue 3 + Naive UI dashboard for status, testing, config, and logs
-- **Desktop Manager**: Windows manager for one-click start, stop, restart, opening Web UI, and viewing detailed logs
-- **Vercel Ready**: Serverless entrypoint and one-click deploy button with environment-variable configuration
+- **可选密钥**: `api_keys` 为空时免密, 填入密钥后按 OpenAI Bearer Key 校验
+- **OpenAI 兼容**: 直接替换 `/v1/chat/completions` 和 `/v1/models`
+- **工具调用**: 完整的 Function Calling 支持 (OpenAI 格式)
+- **多模型**: Flash, Flash Thinking (2万字+输出), Pro, Auto, Lite
+- **思考深度**: 通过 `@think=N` 后缀调节 (0=最深, 4=最浅)
+- **联网搜索**: 内置互联网访问 (Gemini 原生搜索能力)
+- **跨平台**: 纯 Python, 无外部依赖
+- **流式输出**: SSE Streaming 支持
+- **Codex CLI**: Responses API (`/v1/responses`) 兼容 OpenAI Codex
+- **Gemini CLI**: Google 原生 API (`/v1beta/models`) 兼容 Gemini CLI
+- **Web 管理台**: Vue 3 + Naive UI 页面, 可查看状态、测试接口、编辑配置、看详细日志
+- **桌面管理器**: Windows 本地管理器, 支持一键启动、关闭、重启、打开 Web 端和查看日志
+- **Vercel 部署**: 内置 Serverless 入口和一键部署按钮, 支持通过环境变量配置
 
-## Quick Start
+## 快速开始
 
 ```bash
 python gemini_web2api.py
 ```
 
-Server starts at `http://localhost:8081/v1`.
+服务启动在 `http://localhost:8081/v1`.
 
-Open the Web Admin Console at `http://localhost:8081/admin`.
+Web 管理台地址是 `http://localhost:8081/admin`.
 
-## Web Admin Console
+## Web 管理台
 
-![GeminiWeb2API admin console](docs/admin-console.png)
+![GeminiWeb2API 管理台截图](docs/admin-console.png)
 
-The admin console is built with Vue 3 + Naive UI and is served by the Python process from `/admin`.
+管理台使用 Vue 3 + Naive UI 编写, 由 Python 服务在 `/admin` 直接托管.
 
-| Page | What it does |
-|------|--------------|
-| Overview | Shows service health, version, model count, local/LAN/public URLs, log size, cookie state, proxy state, and whether the built admin assets are ready. |
-| Service Test | Sends requests to OpenAI Chat Completions, OpenAI Responses, Google `generateContent`, or Google `streamGenerateContent`; supports model selection, streaming toggle, response preview, and curl copy. |
-| Settings | Edits `cookie_file`, `proxy`, `default_model`, `public_base_url`, and `empty_response_fallback`, then saves them back to `config.json`. |
-| Logs | Reads `logs/gemini_web2api.log`, supports incremental refresh, pause/resume auto refresh, copy, clear view, and scroll-to-bottom. |
+| 页面 | 功能 |
+|------|------|
+| 概览 | 查看服务健康状态、版本、模型数量、本机/局域网/公网地址、日志大小、Cookie 状态、代理状态和前端构建状态. |
+| 服务测试 | 可测试 OpenAI Chat Completions、OpenAI Responses、Google `generateContent`、Google `streamGenerateContent`; 支持选择模型、流式开关、响应预览和复制 curl. |
+| 配置 | 编辑 `cookie_file`、`proxy`、`default_model`、`public_base_url`、`empty_response_fallback`, 并保存回 `config.json`. |
+| 日志 | 读取 `logs/gemini_web2api.log`, 支持增量刷新、暂停/恢复自动刷新、复制、清空视图和自动滚动到底部. |
 
-### Desktop Manager
+### 桌面管理器
 
-On Windows, run `manager.pyw` or the packaged `GeminiWeb2API_Manager.exe` to manage the local service without a terminal.
+Windows 下运行 `manager.pyw` 或打包后的 `GeminiWeb2API_Manager.exe`, 即可不用打开终端来管理本地服务.
 
-- `Start`, `Stop`, and `Restart` control the background API process.
-- `Open Web Admin Console` opens `http://127.0.0.1:{port}/admin`.
-- `Open API URL` opens `http://127.0.0.1:{port}/v1`.
-- The log panel tails the same `logs/gemini_web2api.log` file used by the Web Admin Console.
+- `启动`、`停止`、`重启` 控制后台 API 服务进程.
+- `打开 Web 管理台` 打开 `http://127.0.0.1:{port}/admin`.
+- `打开 API 地址` 打开 `http://127.0.0.1:{port}/v1`.
+- 日志区域会实时读取同一个 `logs/gemini_web2api.log`, Web 管理台也使用这个日志文件.
 
-### Rebuild the Admin Console
+### 重新构建管理台
 
-Only needed when editing files under `web-admin/`:
+只有修改 `web-admin/` 下的前端源码时才需要执行:
 
 ```bash
 cd web-admin
@@ -68,16 +68,16 @@ npm install
 npm run build
 ```
 
-The build output is written to `gemini_web2api/admin_static/` and is included by the PyInstaller specs.
+构建产物会写入 `gemini_web2api/admin_static/`, PyInstaller 配置也会把它打进 exe.
 
-## Client Configuration
+## 客户端配置
 
-### Cherry Studio / ChatBox / any OpenAI client
+### Cherry Studio / ChatBox / 任何 OpenAI 兼容客户端
 
-| Field | Value |
-|-------|-------|
+| 字段 | 值 |
+|------|-----|
 | Base URL | `http://localhost:8081/v1` |
-| API Key | any `api_keys` value from `config.json`; anything if not configured |
+| API Key | `config.json` 中的任意 `api_keys`；未配置时随便填 |
 | Model | `gemini-3.5-flash-thinking` |
 
 ### curl
@@ -86,7 +86,7 @@ The build output is written to `gemini_web2api/admin_static/` and is included by
 curl http://localhost:8081/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer sk-your-key" \
-  -d '{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"Hello!"}]}'
+  -d '{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"你好!"}]}'
 ```
 
 ### OpenAI Python SDK
@@ -96,7 +96,7 @@ from openai import OpenAI
 client = OpenAI(base_url="http://localhost:8081/v1", api_key="sk-your-key")
 resp = client.chat.completions.create(
     model="gemini-3.5-flash-thinking",
-    messages=[{"role": "user", "content": "Explain quantum computing"}]
+    messages=[{"role": "user", "content": "解释量子计算"}]
 )
 print(resp.choices[0].message.content)
 ```
@@ -109,63 +109,63 @@ export GOOGLE_GEMINI_BASE_URL=http://localhost:8081
 gemini
 ```
 
-Supports Google native API endpoints:
-- `GET /v1beta/models` — list models
-- `POST /v1beta/models/{model}:generateContent` — non-streaming
-- `POST /v1beta/models/{model}:streamGenerateContent` — streaming (SSE)
+支持 Google 原生 API 端点:
+- `GET /v1beta/models` — 模型列表
+- `POST /v1beta/models/{model}:generateContent` — 非流式生成
+- `POST /v1beta/models/{model}:streamGenerateContent` — 流式生成 (SSE)
 
-## Available Models
+## 可用模型
 
-| Model | Description | Output |
-|-------|-------------|--------|
-| `gemini-3.5-flash` | Fast general-purpose | ~12k chars |
-| `gemini-3.5-flash-thinking` | Deep thinking, longest output | **~20k chars** |
-| `gemini-3.5-flash-thinking-lite` | Adaptive thinking depth | ~15k chars |
-| `gemini-3.1-pro` | Pro (needs cookie for real routing) | ~12k chars |
-| `gemini-auto` | Auto model selection | varies |
-| `gemini-flash-lite` | Lightweight fast | ~10k chars |
+| 模型 | 说明 | 输出量 |
+|------|------|--------|
+| `gemini-3.5-flash` | 快速通用 | ~1.2万字 |
+| `gemini-3.5-flash-thinking` | 深度思考, 最长输出 | **~2万字** |
+| `gemini-3.5-flash-thinking-lite` | 自适应思考深度 | ~1.5万字 |
+| `gemini-3.1-pro` | Pro (需 cookie 才能真正路由) | ~1.2万字 |
+| `gemini-auto` | 自动选择模型 | 不定 |
+| `gemini-flash-lite` | 轻量快速 | ~1万字 |
 
-### Thinking Depth
+### 思考深度
 
-Append `@think=N` to any model name:
+在模型名后追加 `@think=N`:
 
 ```
-gemini-3.5-flash-thinking@think=0   # deepest (default)
-gemini-3.5-flash-thinking@think=2   # medium
-gemini-3.5-flash-thinking@think=4   # shallowest
+gemini-3.5-flash-thinking@think=0   # 最深 (默认)
+gemini-3.5-flash-thinking@think=2   # 中等
+gemini-3.5-flash-thinking@think=4   # 最浅
 ```
 
-## Optional: Cookie for Pro
+## 可选: Cookie 配置 (Pro 模型)
 
-Anonymous access works for all models, but `gemini-3.1-pro` routes to Flash without authentication. To get real Pro routing, provide a cookie file:
+匿名访问对所有模型有效, 但 `gemini-3.1-pro` 在无认证时会路由到 Flash. 要获得真正的 Pro 路由, 提供 cookie 文件:
 
 ```bash
 python gemini_web2api.py --cookie-file cookie.txt
 ```
 
-### How to get cookies
+### 如何获取 Cookie
 
-1. Open Chrome, go to [gemini.google.com](https://gemini.google.com) and sign in with any free Google account
-2. Open DevTools (F12) → Application → Cookies → `https://gemini.google.com`
-3. Copy these cookie values: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`, `__Secure-1PSID`
-4. Create `cookie.txt` in this format:
+1. 打开 Chrome, 访问 [gemini.google.com](https://gemini.google.com) 并登录任意免费 Google 账号
+2. 打开开发者工具 (F12) → Application → Cookies → `https://gemini.google.com`
+3. 复制以下 cookie 值: `SID`, `HSID`, `SSID`, `APISID`, `SAPISID`, `__Secure-1PSID`
+4. 创建 `cookie.txt`, 格式如下:
 
 ```
-SID=your_sid_value; HSID=your_hsid_value; SSID=your_ssid_value; APISID=your_apisid_value; SAPISID=your_sapisid_value; __Secure-1PSID=your_1psid_value
+SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值; SAPISID=你的SAPISID值; __Secure-1PSID=你的1PSID值
 ```
 
-Or use the JSON format:
+或使用 JSON 格式:
 ```json
-{"cookie": "SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx", "sapisid": "your_sapisid_value"}
+{"cookie": "SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx", "sapisid": "你的SAPISID值"}
 ```
 
-**Alternative (browser extension)**: Use any "Export Cookies" extension to export cookies for `gemini.google.com` in Netscape format, then convert to the single-line format above.
+**替代方案 (浏览器扩展)**: 使用任意 "Export Cookies" 扩展导出 `gemini.google.com` 的 cookie, 然后转换为上述单行格式.
 
-No paid subscription needed — a free Google account is sufficient.
+不需要付费订阅 — 免费 Google 账号即可.
 
-## Configuration
+## 配置文件
 
-Create `config.json` in the same directory:
+在同目录创建 `config.json`:
 
 ```json
 {
@@ -184,43 +184,43 @@ Create `config.json` in the same directory:
 }
 ```
 
-When `api_keys` is `[]`, authentication is disabled. When one or more keys are set, `/v1/*` endpoints require `Authorization: Bearer <key>` or `x-api-key: <key>`.
+`api_keys` 为空数组 `[]` 时不校验密钥；填入一个或多个密钥后, `/v1/*` 接口需要 `Authorization: Bearer <key>` 或 `x-api-key: <key>`.
 
-## Vercel
+## Vercel 部署
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
-This repository includes `api/index.py` and `vercel.json`, so Vercel can run it as a Python Serverless Function. `/`, `/admin`, `/admin/api/*`, `/v1/*`, and `/v1beta/*` are routed to the same handler.
+仓库已包含 `api/index.py` 和 `vercel.json`, Vercel 会把它作为 Python Serverless Function 运行. `/`、`/admin`、`/admin/api/*`、`/v1/*`、`/v1beta/*` 都会路由到同一个处理器.
 
-### One-click deploy
+### 一键部署步骤
 
-1. Click **Deploy with Vercel**.
-2. Import the repository into your Vercel account. If you deploy from your own fork, replace the button repository URL with your fork URL.
-3. Fill in any environment variables you need. All variables below are optional unless you want API-key auth or authenticated Gemini cookies.
-4. Deploy, then use `https://your-project.vercel.app/v1` as the OpenAI-compatible Base URL and `https://your-project.vercel.app/admin` as the Web Admin Console.
+1. 点击上面的 **Deploy with Vercel** 按钮.
+2. 将仓库导入你的 Vercel 账号. 如果你部署自己的 fork, 把按钮里的 repository URL 换成你的 fork 地址.
+3. 按需填写环境变量. 下面的变量都是可选项, 只有需要 API Key 校验或真实 Pro 路由时才必须配置相关项.
+4. 部署完成后, 使用 `https://your-project.vercel.app/v1` 作为 OpenAI 兼容 Base URL, 使用 `https://your-project.vercel.app/admin` 打开 Web 管理台.
 
-### Environment variables
+### 环境变量
 
-| Name | Required | Example | Description |
-|------|----------|---------|-------------|
-| `API_KEYS` | No | `sk-one,sk-two` | Comma-separated keys. Empty means no auth. Clients send `Authorization: Bearer <key>` or `x-api-key`. |
-| `GEMINI_COOKIE` | No | `SID=...; HSID=...; ...` | Full Gemini cookie string. Use this for real Pro routing on serverless deployments where `cookie_file` is not available. |
-| `DEFAULT_MODEL` | No | `gemini-3.5-flash-thinking` | Default model when the request omits `model`. |
-| `PROXY` | No | `http://user:pass@host:port` | HTTP/HTTPS proxy used by upstream Gemini requests. |
-| `PUBLIC_BASE_URL` | No | `https://your-project.vercel.app/v1` | Public URL displayed in the admin console. |
-| `GEMINI_BL` | No | `boq_assistant-bard-web-server_...` | Gemini web build label. Usually leave the default. |
-| `RETRY_ATTEMPTS` | No | `3` | Number of upstream retry attempts. |
-| `RETRY_DELAY_SEC` | No | `2` | Delay between upstream retries. |
-| `REQUEST_TIMEOUT_SEC` | No | `60` | Upstream request timeout. Keep it within your Vercel function duration. |
-| `LOG_REQUESTS` | No | `true` | Enables serverless function logs. View them in Vercel Logs. |
+| 变量名 | 必填 | 示例 | 说明 |
+|--------|------|------|------|
+| `API_KEYS` | 否 | `sk-one,sk-two` | 多个密钥用英文逗号分隔. 留空表示不校验. 客户端用 `Authorization: Bearer <key>` 或 `x-api-key` 传入. |
+| `GEMINI_COOKIE` | 否 | `SID=...; HSID=...; ...` | 完整 Gemini Cookie 字符串. Vercel 不能挂载本地 `cookie_file`, 所以云端部署用这个变量. |
+| `DEFAULT_MODEL` | 否 | `gemini-3.5-flash-thinking` | 请求里没有 `model` 时使用的默认模型. |
+| `PROXY` | 否 | `http://user:pass@host:port` | 上游访问 Gemini 时使用的 HTTP/HTTPS 代理. |
+| `PUBLIC_BASE_URL` | 否 | `https://your-project.vercel.app/v1` | 管理台里展示的公网调用地址. |
+| `GEMINI_BL` | 否 | `boq_assistant-bard-web-server_...` | Gemini 网页端 build label, 一般保持默认即可. |
+| `RETRY_ATTEMPTS` | 否 | `3` | 上游请求重试次数. |
+| `RETRY_DELAY_SEC` | 否 | `2` | 每次重试之间的等待秒数. |
+| `REQUEST_TIMEOUT_SEC` | 否 | `60` | 上游请求超时时间, 建议不要超过当前 Vercel 套餐的函数时长. |
+| `LOG_REQUESTS` | 否 | `true` | 是否输出函数日志. 云端日志请在 Vercel Logs 中查看. |
 
-### Vercel notes
+### Vercel 注意事项
 
-- Vercel deployments are serverless. Long streaming responses are limited by your Vercel plan and function duration.
-- The Web Admin Console can view status and test requests, but serverless logs live in Vercel Logs; local `logs/gemini_web2api.log` is mainly for desktop/Docker runs.
-- Avoid committing real cookies or API keys. Put secrets in Vercel Project Settings → Environment Variables.
+- Vercel 是 Serverless 环境, 长时间流式响应会受到套餐和函数时长限制.
+- Web 管理台可以查看状态和测试接口, 但云端日志主要在 Vercel Logs 里; 本地的 `logs/gemini_web2api.log` 更适合桌面版和 Docker 部署.
+- 不要把真实 Cookie 或 API Key 提交到仓库. 请放到 Vercel Project Settings → Environment Variables.
 
-## Docker
+## Docker 部署
 
 ```bash
 cp config.example.json config.json
@@ -228,76 +228,57 @@ docker build -t gemini-web2api .
 docker run -d --name gemini-web2api -p 8081:8081 -v ./config.json:/app/config.json gemini-web2api
 ```
 
-Or use Docker Compose:
+或使用 Docker Compose:
 
 ```bash
 cp config.example.json config.json
 docker compose up -d
 ```
 
-To mount a cookie file:
+如需挂载 Cookie 文件:
 
 ```bash
 docker run -d --name gemini-web2api -p 8081:8081 -v ./config.json:/app/config.json -v ./cookie.txt:/app/cookie.txt gemini-web2api
 ```
 
-Set `"cookie_file": "/app/cookie.txt"` in `config.json`.
+此时 `config.json` 中设置 `"cookie_file": "/app/cookie.txt"`.
 
-## Proxy
+## 代理配置
 
-If you cannot access `gemini.google.com` directly (connection timeout), configure a proxy:
+如果无法直接访问 `gemini.google.com` (连接超时), 需要配置代理:
 
-**Method 1: CLI argument**
+**方式 1: 命令行参数**
 ```bash
 python gemini_web2api.py --proxy http://127.0.0.1:7890
 ```
 
-**Method 2: config.json**
+**方式 2: config.json**
 ```json
 {"proxy": "http://127.0.0.1:7890"}
 ```
 
-**Method 3: Environment variable** (auto-detected)
+**方式 3: 环境变量** (自动检测)
 ```bash
-export HTTPS_PROXY=http://127.0.0.1:7890
+set HTTPS_PROXY=http://127.0.0.1:7890
 python gemini_web2api.py
 ```
 
-Works with Clash, V2Ray, Shadowsocks, or any HTTP proxy.
+支持 Clash, V2Ray, Shadowsocks 等任何 HTTP 代理.
 
-## Tool Calling
-
-```python
-resp = client.chat.completions.create(
-    model="gemini-3.5-flash",
-    messages=[{"role": "user", "content": "What's the weather in Tokyo?"}],
-    tools=[{
-        "type": "function",
-        "function": {
-            "name": "get_weather",
-            "description": "Get weather for a city",
-            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}
-        }
-    }]
-)
-```
-
-## Requirements
+## 系统要求
 
 - Python 3.8+
-- No external dependencies (stdlib only)
-- Network access to `gemini.google.com` (proxy/VPN may be needed in some regions)
+- 无外部依赖 (仅标准库)
+- 需要能访问 `gemini.google.com` (部分地区需代理)
 
-## How It Works
+## 工作原理
 
-This tool reverse-engineers Google Gemini's web StreamGenerate protocol. It sends requests to the same endpoint that the Gemini web app uses, converting between OpenAI's API format and Gemini's internal protobuf-like format.
+逆向 Google Gemini 网页端的 StreamGenerate 协议, 将 OpenAI API 格式与 Gemini 内部 protobuf-like 格式互转. 模型选择通过请求 payload 的 `[79]` 字段控制, 映射自 Gemini 前端 JS 源码中的 `MODE_CATEGORY` 枚举.
 
-The model selection is controlled by field `[79]` in the request payload, mapped from Gemini's frontend JavaScript source (`MODE_CATEGORY` enum).
+## 致谢
 
-## Acknowledgments
-
-- [linux.do](https://linux.do) community
-- Inspired by the open-source API proxy ecosystem
+- [linux.do](https://linux.do) 社区
+- 开源 API 代理生态
 
 ## License
 
