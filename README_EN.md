@@ -192,12 +192,49 @@ When `api_keys` is `[]`, authentication is disabled. When one or more keys are s
 
 This repository includes `api/index.py` and `vercel.json`, so Vercel can run it as a Python Serverless Function. `/`, `/admin`, `/admin/api/*`, `/v1/*`, and `/v1beta/*` are routed to the same handler.
 
-### One-click deploy
+### Before you deploy
 
-1. Click **Deploy with Vercel**.
-2. Import the repository into your Vercel account. If you deploy from your own fork, replace the button repository URL with your fork URL.
-3. Fill in any environment variables you need. All variables below are optional unless you want API-key auth or authenticated Gemini cookies.
-4. Deploy, then use `https://your-project.vercel.app/v1` as the OpenAI-compatible Base URL and `https://your-project.vercel.app/admin` as the Web Admin Console.
+1. Prepare a GitHub account and a Vercel account.
+2. For a quick trial, you can leave all environment variables empty; anonymous Flash requests still work.
+3. To protect your endpoint, prepare one or more API keys such as `sk-my-private-key`.
+4. To improve real Pro routing for `gemini-3.1-pro`, prepare `GEMINI_COOKIE`. See the cookie section above.
+5. If the Vercel region cannot reach `gemini.google.com` reliably, prepare an HTTP/HTTPS proxy and set `PROXY`.
+
+### Option 1: one-click deploy
+
+1. Click **Deploy with Vercel** above.
+2. Vercel opens the new project import page. The repository defaults to `t479842598/gemini-web2api-manage`.
+3. Keep the default Project Name if you like. Framework Preset can be `Other` or Vercel auto-detection.
+4. Fill in Environment Variables only if needed. You can leave them empty for a first deployment.
+5. Click **Deploy** and wait for the build to finish.
+6. Open the Production domain from the Vercel project page.
+
+### Option 2: deploy your fork
+
+1. Fork this repository to your own GitHub account.
+2. In Vercel, click **Add New... → Project**.
+3. Select your forked repository and import it.
+4. Keep Build & Output Settings as default; `vercel.json` handles routing.
+5. Add the environment variables you need.
+6. Click **Deploy**. Future GitHub pushes will trigger automatic redeploys.
+
+### Option 3: deploy with Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login
+vercel
+vercel --prod
+```
+
+The first CLI run asks for project name, team, and whether to link an existing project. To add variables from CLI:
+
+```bash
+vercel env add API_KEYS production
+vercel env add GEMINI_COOKIE production
+vercel env add DEFAULT_MODEL production
+vercel --prod
+```
 
 ### Environment variables
 
@@ -206,7 +243,7 @@ This repository includes `api/index.py` and `vercel.json`, so Vercel can run it 
 | `API_KEYS` | No | `sk-one,sk-two` | Comma-separated keys. Empty means no auth. Clients send `Authorization: Bearer <key>` or `x-api-key`. |
 | `GEMINI_COOKIE` | No | `SID=...; HSID=...; ...` | Full Gemini cookie string. Use this for real Pro routing on serverless deployments where `cookie_file` is not available. |
 | `DEFAULT_MODEL` | No | `gemini-3.5-flash-thinking` | Default model when the request omits `model`. |
-| `PROXY` | No | `http://user:pass@host:port` | HTTP/HTTPS proxy used by upstream Gemini requests. |
+| `PROXY` | No | `http://user:pass@host:port` | HTTP/HTTPS proxy used by upstream Gemini requests. Do not use SOCKS URLs here. |
 | `PUBLIC_BASE_URL` | No | `https://your-project.vercel.app/v1` | Public URL displayed in the admin console. |
 | `GEMINI_BL` | No | `boq_assistant-bard-web-server_...` | Gemini web build label. Usually leave the default. |
 | `RETRY_ATTEMPTS` | No | `3` | Number of upstream retry attempts. |
@@ -214,11 +251,79 @@ This repository includes `api/index.py` and `vercel.json`, so Vercel can run it 
 | `REQUEST_TIMEOUT_SEC` | No | `60` | Upstream request timeout. Keep it within your Vercel function duration. |
 | `LOG_REQUESTS` | No | `true` | Enables serverless function logs. View them in Vercel Logs. |
 
+### Recommended examples
+
+Public trial without auth:
+
+```text
+DEFAULT_MODEL=gemini-3.5-flash-thinking
+PUBLIC_BASE_URL=https://your-project.vercel.app/v1
+LOG_REQUESTS=true
+```
+
+Private use with API key:
+
+```text
+API_KEYS=sk-your-private-key
+DEFAULT_MODEL=gemini-3.5-flash-thinking
+PUBLIC_BASE_URL=https://your-project.vercel.app/v1
+```
+
+Cookie and proxy:
+
+```text
+API_KEYS=sk-your-private-key
+GEMINI_COOKIE=SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx
+PROXY=http://user:pass@proxy.example.com:8080
+REQUEST_TIMEOUT_SEC=60
+```
+
+### Verify after deployment
+
+Replace `your-project.vercel.app` with your domain:
+
+```bash
+curl https://your-project.vercel.app/
+curl https://your-project.vercel.app/v1/models
+curl https://your-project.vercel.app/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-private-key" \
+  -d '{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"hello"}]}'
+```
+
+If `API_KEYS` is not configured, remove the `Authorization` header. The Web Admin Console is available at:
+
+```text
+https://your-project.vercel.app/admin
+```
+
+OpenAI-compatible clients should use:
+
+| Field | Value |
+|-------|-------|
+| Base URL | `https://your-project.vercel.app/v1` |
+| API Key | any value from `API_KEYS`; anything if unset |
+| Model | `gemini-3.5-flash-thinking` |
+
+### Update a deployment
+
+- If you deployed from GitHub, push code changes and Vercel will redeploy automatically.
+- If you only changed environment variables, update them in Vercel Project Settings → Environment Variables, then redeploy Production from Deployments.
+- If you changed the admin frontend locally, run `cd web-admin && npm run build`, then commit `gemini_web2api/admin_static/`.
+
+### Troubleshooting
+
+- `401 invalid api key`: `API_KEYS` is configured, but the client did not send `Authorization: Bearer <key>` or `x-api-key`.
+- `upstream error` or timeout: the Vercel region may not reach Gemini reliably. Configure `PROXY` or increase `REQUEST_TIMEOUT_SEC`.
+- Pro still behaves like Flash: `GEMINI_COOKIE` is missing, expired, or the account lacks the capability.
+- `/admin` opens but logs are empty: Vercel logs live in the Vercel project Logs page; local log files are mainly for desktop and Docker runs.
+- Streaming stops early: serverless functions have duration limits. Reduce request length or use local/Docker deployment for long streams.
+
 ### Vercel notes
 
-- Vercel deployments are serverless. Long streaming responses are limited by your Vercel plan and function duration.
-- The Web Admin Console can view status and test requests, but serverless logs live in Vercel Logs; local `logs/gemini_web2api.log` is mainly for desktop/Docker runs.
 - Avoid committing real cookies or API keys. Put secrets in Vercel Project Settings → Environment Variables.
+- Vercel is serverless, not a long-running process. Each request is handled by a function invocation.
+- Free-plan limits and regional network quality vary. For stable long streaming output, desktop manager or Docker is more controllable.
 
 ## Docker
 

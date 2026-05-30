@@ -192,12 +192,49 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 
 仓库已包含 `api/index.py` 和 `vercel.json`, Vercel 会把它作为 Python Serverless Function 运行. `/`、`/admin`、`/admin/api/*`、`/v1/*`、`/v1beta/*` 都会路由到同一个处理器.
 
-### 一键部署步骤
+### 部署前准备
 
-1. 点击上面的 **Deploy with Vercel** 按钮.
-2. 将仓库导入你的 Vercel 账号. 如果你部署自己的 fork, 把按钮里的 repository URL 换成你的 fork 地址.
-3. 按需填写环境变量. 下面的变量都是可选项, 只有需要 API Key 校验或真实 Pro 路由时才必须配置相关项.
-4. 部署完成后, 使用 `https://your-project.vercel.app/v1` 作为 OpenAI 兼容 Base URL, 使用 `https://your-project.vercel.app/admin` 打开 Web 管理台.
+1. 准备一个 GitHub 账号和 Vercel 账号.
+2. 如果只是快速体验, 可以不配置任何环境变量, 匿名模式也能调用 Flash 系列模型.
+3. 如果要限制别人调用你的接口, 准备一个或多个自定义 API Key, 例如 `sk-my-private-key`.
+4. 如果要让 `gemini-3.1-pro` 尽量按真实 Pro 路由, 准备 `GEMINI_COOKIE`. Cookie 获取方式见上面的 Cookie 配置章节.
+5. 如果你的 Vercel 部署区域访问 `gemini.google.com` 不稳定, 准备一个 HTTP/HTTPS 代理地址并填入 `PROXY`.
+
+### 方式一: 一键部署
+
+1. 点击上方 **Deploy with Vercel** 按钮.
+2. Vercel 会打开新项目导入页, Repository 默认指向 `t479842598/gemini-web2api-manage`.
+3. Project Name 可以保持默认, Framework Preset 选择 `Other` 或保持 Vercel 自动识别.
+4. 在 Environment Variables 页面按需填写变量. 只想先跑起来可以全部留空.
+5. 点击 **Deploy** 等待构建完成.
+6. 部署完成后进入 Vercel 项目页, 打开 Production 域名.
+
+### 方式二: Fork 后部署
+
+1. 在 GitHub 上 Fork 本仓库到自己的账号.
+2. 登录 Vercel, 点击 **Add New... → Project**.
+3. 选择你 Fork 后的仓库并导入.
+4. Build & Output Settings 保持默认即可, `vercel.json` 会负责路由.
+5. 在 Environment Variables 中填入需要的变量.
+6. 点击 **Deploy**. 之后你推送到 GitHub, Vercel 会自动重新部署.
+
+### 方式三: Vercel CLI 部署
+
+```bash
+npm i -g vercel
+vercel login
+vercel
+vercel --prod
+```
+
+CLI 首次运行会询问项目名称、团队和是否链接现有项目. 如果需要通过 CLI 添加变量:
+
+```bash
+vercel env add API_KEYS production
+vercel env add GEMINI_COOKIE production
+vercel env add DEFAULT_MODEL production
+vercel --prod
+```
 
 ### 环境变量
 
@@ -206,7 +243,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 | `API_KEYS` | 否 | `sk-one,sk-two` | 多个密钥用英文逗号分隔. 留空表示不校验. 客户端用 `Authorization: Bearer <key>` 或 `x-api-key` 传入. |
 | `GEMINI_COOKIE` | 否 | `SID=...; HSID=...; ...` | 完整 Gemini Cookie 字符串. Vercel 不能挂载本地 `cookie_file`, 所以云端部署用这个变量. |
 | `DEFAULT_MODEL` | 否 | `gemini-3.5-flash-thinking` | 请求里没有 `model` 时使用的默认模型. |
-| `PROXY` | 否 | `http://user:pass@host:port` | 上游访问 Gemini 时使用的 HTTP/HTTPS 代理. |
+| `PROXY` | 否 | `http://user:pass@host:port` | 上游访问 Gemini 时使用的 HTTP/HTTPS 代理. 注意不要填写 SOCKS 地址. |
 | `PUBLIC_BASE_URL` | 否 | `https://your-project.vercel.app/v1` | 管理台里展示的公网调用地址. |
 | `GEMINI_BL` | 否 | `boq_assistant-bard-web-server_...` | Gemini 网页端 build label, 一般保持默认即可. |
 | `RETRY_ATTEMPTS` | 否 | `3` | 上游请求重试次数. |
@@ -214,11 +251,79 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 | `REQUEST_TIMEOUT_SEC` | 否 | `60` | 上游请求超时时间, 建议不要超过当前 Vercel 套餐的函数时长. |
 | `LOG_REQUESTS` | 否 | `true` | 是否输出函数日志. 云端日志请在 Vercel Logs 中查看. |
 
+### 推荐配置示例
+
+公开测试, 不加鉴权:
+
+```text
+DEFAULT_MODEL=gemini-3.5-flash-thinking
+PUBLIC_BASE_URL=https://your-project.vercel.app/v1
+LOG_REQUESTS=true
+```
+
+私人使用, 加 API Key:
+
+```text
+API_KEYS=sk-your-private-key
+DEFAULT_MODEL=gemini-3.5-flash-thinking
+PUBLIC_BASE_URL=https://your-project.vercel.app/v1
+```
+
+带 Cookie 和代理:
+
+```text
+API_KEYS=sk-your-private-key
+GEMINI_COOKIE=SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx
+PROXY=http://user:pass@proxy.example.com:8080
+REQUEST_TIMEOUT_SEC=60
+```
+
+### 部署后验证
+
+把 `your-project.vercel.app` 换成自己的域名:
+
+```bash
+curl https://your-project.vercel.app/
+curl https://your-project.vercel.app/v1/models
+curl https://your-project.vercel.app/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-your-private-key" \
+  -d '{"model":"gemini-3.5-flash","messages":[{"role":"user","content":"hello"}]}'
+```
+
+如果没有配置 `API_KEYS`, 可以去掉 `Authorization` 请求头. Web 管理台地址是:
+
+```text
+https://your-project.vercel.app/admin
+```
+
+OpenAI 兼容客户端填写:
+
+| 字段 | 值 |
+|------|-----|
+| Base URL | `https://your-project.vercel.app/v1` |
+| API Key | `API_KEYS` 中的任意一个; 未配置时可随便填 |
+| Model | `gemini-3.5-flash-thinking` |
+
+### 更新部署
+
+- 如果使用一键部署导入的仓库, 后续修改代码后推送到 GitHub, Vercel 会自动重新部署.
+- 如果只改环境变量, 在 Vercel Project Settings → Environment Variables 修改后, 进入 Deployments 重新部署一次生产环境.
+- 如果本地改了前端管理台, 先运行 `cd web-admin && npm run build`, 再提交 `gemini_web2api/admin_static/` 的构建产物.
+
+### 常见问题
+
+- `401 invalid api key`: 你配置了 `API_KEYS`, 但客户端没有传 `Authorization: Bearer <key>` 或 `x-api-key`.
+- `upstream error` 或请求超时: Vercel 所在区域可能访问 Gemini 不稳定, 尝试配置 `PROXY` 或调大 `REQUEST_TIMEOUT_SEC`.
+- Pro 模型仍像 Flash: 没有配置 `GEMINI_COOKIE`, Cookie 过期, 或当前账号本身没有对应能力.
+- `/admin` 能打开但日志为空: Vercel 日志在 Vercel 项目页的 Logs 中查看, 本地日志文件主要用于桌面版和 Docker.
+- 流式响应中断: Serverless 函数有执行时长限制, 长输出建议降低请求长度或使用本地/Docker 部署.
+
 ### Vercel 注意事项
 
-- Vercel 是 Serverless 环境, 长时间流式响应会受到套餐和函数时长限制.
-- Web 管理台可以查看状态和测试接口, 但云端日志主要在 Vercel Logs 里; 本地的 `logs/gemini_web2api.log` 更适合桌面版和 Docker 部署.
-- 不要把真实 Cookie 或 API Key 提交到仓库. 请放到 Vercel Project Settings → Environment Variables.
+- 不要把真实 Cookie 或 API Key 提交到仓库, 请放到 Vercel Project Settings → Environment Variables.
+- Vercel 是 Serverless 环境, 不适合当成长期常驻进程; 每次请求会由函数处理.
+- 免费套餐和不同区域的网络表现可能不同, 如果需要稳定长流式输出, 本地桌面管理器或 Docker 更可控.
 
 ## Docker 部署
 
