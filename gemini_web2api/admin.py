@@ -154,6 +154,7 @@ def admin_config_payload(config: dict) -> dict:
         "public_base_url": config.get("public_base_url") or "",
         "empty_response_fallback": config.get("empty_response_fallback") or "",
         "api_keys": config.get("api_keys") or [],
+        "force_non_stream": bool(config.get("force_non_stream")),
         "admin_password_set": bool(admin_password(config)),
     }
 
@@ -287,6 +288,7 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "api_keys",
         "admin_password",
         "cookie_content",
+        "force_non_stream",
     }
     data = read_config(current_config)
     for key in allowed:
@@ -304,6 +306,9 @@ def save_config(current_config: dict, updates: dict) -> dict:
                     cookie_file = write_cookie_content(data, str(value))
                     data["cookie_file"] = cookie_file
                     current_config["cookie_file"] = cookie_file
+                continue
+            if key == "force_non_stream":
+                data[key] = bool(value)
                 continue
             if key == "admin_password" and value in ("", None):
                 continue

@@ -15,6 +15,7 @@ DEFAULT_CONFIG = {
     "proxy": None,
     "api_keys": [],
     "admin_password": "sk-admin",
+    "force_non_stream": False,
     "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
 }
 

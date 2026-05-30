@@ -60,6 +60,7 @@ DEFAULT_CONFIG = {
     "proxy": None,
     "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
     "admin_password": "sk-admin",
+    "force_non_stream": False,
 }
 
 CONFIG = dict(DEFAULT_CONFIG)
@@ -101,6 +102,10 @@ def log(msg: str):
     if CONFIG["log_requests"]:
         sys.stderr.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
         sys.stderr.flush()
+
+
+def stream_allowed() -> bool:
+    return not bool(CONFIG.get("force_non_stream"))
 
 
 def load_cookie() -> tuple:
@@ -707,7 +712,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": {"message": "empty prompt"}}, 400)
             return
 
-        stream = req.get("stream", False)
+        stream = bool(req.get("stream", False)) and stream_allowed()
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         if stream and not tools:
@@ -868,7 +873,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             output.append({"type": "message", "id": mid, "role": "assistant", "status": "completed",
                            "content": [{"type": "output_text", "text": text or "", "annotations": []}]})
 
-        if req.get("stream"):
+        if req.get("stream") and stream_allowed():
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
@@ -940,6 +945,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
     def _handle_google_generate(self, body: bytes, stream: bool):
         """Handle Google native generateContent / streamGenerateContent."""
+        stream = bool(stream) and stream_allowed()
         req = json.loads(body)
         model_name = self._parse_google_model_from_path()
         if not model_name:

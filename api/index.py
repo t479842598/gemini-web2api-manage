@@ -42,6 +42,7 @@ def _apply_env_config() -> None:
     CONFIG["retry_delay_sec"] = _env_int("RETRY_DELAY_SEC", CONFIG["retry_delay_sec"])
     CONFIG["request_timeout_sec"] = _env_int("REQUEST_TIMEOUT_SEC", CONFIG["request_timeout_sec"])
     CONFIG["log_requests"] = _env_bool("LOG_REQUESTS", CONFIG["log_requests"])
+    CONFIG["force_non_stream"] = _env_bool("FORCE_NON_STREAM", CONFIG.get("force_non_stream", False))
 
     cookie = os.environ.get("GEMINI_COOKIE")
     if cookie:

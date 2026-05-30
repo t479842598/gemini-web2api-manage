@@ -26,6 +26,7 @@ import {
   FlashOutline,
   GlobeOutline,
   LogOutOutline,
+  ChatbubbleEllipsesOutline,
   OpenOutline,
   PlayOutline,
   RefreshOutline,
@@ -59,6 +60,7 @@ const themeOverrides = {
 
 const navItems = [
   { key: 'overview', label: '概览', icon: AnalyticsOutline },
+  { key: 'chat', label: '对话', icon: ChatbubbleEllipsesOutline },
   { key: 'network', label: '网络', icon: GlobeOutline },
   { key: 'test', label: '服务测试', icon: FlashOutline },
   { key: 'settings', label: '配置', icon: SettingsOutline },
@@ -109,6 +111,7 @@ const config = reactive({
   public_base_url: '',
   empty_response_fallback: '',
   api_keys: [],
+  force_non_stream: false,
   admin_password: ''
 })
 
@@ -133,6 +136,13 @@ const test = reactive({
   result: ''
 })
 
+const chat = reactive({
+  model: 'gemini-3.5-flash',
+  stream: false,
+  input: '',
+  messages: []
+})
+
 const logs = reactive({
   text: '',
   offset: null,
@@ -141,16 +151,20 @@ const logs = reactive({
 
 const pageMeta = computed(() => ({
   overview: ['概览', '查看服务状态、调用地址和运行环境'],
+  chat: ['对话', '选择模型并直接和当前服务对话'],
   network: ['网络', '查看公网 IP、所在地区并测试连通性'],
   test: ['服务测试', '发起一次兼容 OpenAI 或 Gemini 的调用'],
   settings: ['配置', '调整 Cookie、代理、密钥、管理员密码和公开地址'],
   logs: ['日志', '实时查看服务与桌面管理器输出']
 }[active.value]))
 
-const modelOptions = computed(() => status.models.map((item) => ({
-  label: `${item.id} - ${item.description || 'model'}`,
-  value: item.id
-})))
+const modelOptions = computed(() => [
+  { label: '全部模型（使用默认模型）', value: '__all__' },
+  ...status.models.map((item) => ({
+    label: `${item.id} - ${item.description || 'model'}`,
+    value: item.id
+  }))
+])
 
 const currentEndpoint = computed(() => endpointOptions.find((item) => item.value === test.endpoint))
 const healthyType = computed(() => status.ok ? 'success' : 'error')
@@ -158,8 +172,12 @@ const cookieState = computed(() => config.cookie_file ? '已配置' : '匿名模
 const proxyState = computed(() => config.proxy ? config.proxy : '系统环境')
 const locationText = computed(() => [network.country, network.region, network.city].filter(Boolean).join(' / ') || '未获取')
 
+function selectedModel(value) {
+  return value && value !== '__all__' ? value : (config.default_model || status.models[0]?.id || 'gemini-3.5-flash')
+}
+
 const curlCommand = computed(() => {
-  const model = test.model || 'gemini-3.5-flash'
+  const model = selectedModel(test.model)
   const prompt = test.prompt.replace(/"/g, '\\"')
   if (test.endpoint === 'responses') {
     return `curl ${status.urls.current || '/v1'}/responses -H "Content-Type: application/json" -d "{\"model\":\"${model}\",\"input\":\"${prompt}\"}"`
@@ -295,7 +313,7 @@ async function saveConfig() {
 }
 
 function requestForTest() {
-  const model = test.model || config.default_model || 'gemini-3.5-flash'
+  const model = selectedModel(test.model)
   if (test.endpoint === 'responses') {
     return ['/v1/responses', { model, input: test.prompt, stream: false }]
   }
@@ -308,9 +326,23 @@ function requestForTest() {
   return ['/v1/chat/completions', {
     model,
     messages: [{ role: 'user', content: test.prompt }],
-    stream: test.stream
+    stream: test.stream && !config.force_non_stream
   }]
 }
+
+const callGuide = computed(() => {
+  const base = status.urls.current || '/v1'
+  const model = selectedModel(test.model)
+  const key = apiKeysText.value.split(/\n|,/).map((item) => item.trim()).filter(Boolean)[0] || 'sk-your-key'
+  return [
+    `Base URL: ${base}`,
+    `API Key: ${apiKeysText.value ? key : '未启用密钥时可任意填写'}`,
+    `Chat: POST ${base}/chat/completions`,
+    `Responses: POST ${base}/responses`,
+    `模型: ${model}`,
+    `流式: ${config.force_non_stream ? '全局已关闭，外部 stream=true 也会按非流式处理' : '按请求 stream 参数控制'}`
+  ].join('\n')
+})
 
 async function runTest() {
   testing.value = true
@@ -328,6 +360,35 @@ async function runTest() {
   } catch (err) {
     test.result = `请求失败\n${err.message}`
     message.error('测试失败')
+  } finally {
+    testing.value = false
+  }
+}
+
+async function sendChat() {
+  const content = chat.input.trim()
+  if (!content) {
+    message.warning('请输入对话内容')
+    return
+  }
+  const model = selectedModel(chat.model)
+  const messages = [...chat.messages, { role: 'user', content }]
+  chat.messages = messages
+  chat.input = ''
+  testing.value = true
+  try {
+    const res = await fetch('/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, messages, stream: chat.stream && !config.force_non_stream })
+    })
+    const text = await res.text()
+    if (!res.ok) throw new Error(pretty(text))
+    const data = JSON.parse(text)
+    const answer = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.delta?.content || ''
+    chat.messages.push({ role: 'assistant', content: answer || config.empty_response_fallback || '空响应' })
+  } catch (err) {
+    chat.messages.push({ role: 'assistant', content: `调用失败：${err.message}` })
   } finally {
     testing.value = false
   }
@@ -428,7 +489,7 @@ onBeforeUnmount(() => {
             <div class="top-actions">
               <NTag :type="healthyType" round>{{ status.ok ? '服务正常' : '服务异常' }}</NTag>
               <NButton secondary :loading="loading" @click="loadStatus(true)"><template #icon><NIcon :component="RefreshOutline" /></template>刷新</NButton>
-              <NButton secondary @click="openUrl(status.urls.admin)"><template #icon><NIcon :component="OpenOutline" /></template>Web</NButton>
+              <NButton type="primary" secondary @click="active = 'chat'"><template #icon><NIcon :component="ChatbubbleEllipsesOutline" /></template>对话</NButton>
               <NButton secondary @click="logout"><template #icon><NIcon :component="LogOutOutline" /></template>退出</NButton>
             </div>
           </header>
@@ -456,6 +517,29 @@ onBeforeUnmount(() => {
                   <NStatistic label="API 密钥" :value="apiKeysText ? '已启用' : '未启用'" />
                   <NStatistic label="管理台目录" :value="status.admin_static?.ready ? 'ready' : 'missing'" />
                 </NSpace>
+              </div>
+            </section>
+
+            <section v-show="active === 'chat'" class="content-grid">
+              <div class="panel span-8 chat-panel">
+                <div class="panel-head"><h2 class="panel-title">对话</h2><NSpace align="center" wrap><NTag type="info" round>{{ config.force_non_stream ? '全局非流式' : (chat.stream ? '流式请求' : '非流式请求') }}</NTag><NButton secondary @click="chat.messages = []"><template #icon><NIcon :component="TrashOutline" /></template>清空</NButton></NSpace></div>
+                <div class="chat-list">
+                  <div v-if="!chat.messages.length" class="chat-empty">选择模型后输入内容，即可用当前服务发起对话。</div>
+                  <div v-for="(item, index) in chat.messages" :key="index" class="chat-message" :class="item.role">
+                    <div class="chat-role">{{ item.role === 'user' ? '你' : '助手' }}</div>
+                    <div class="chat-bubble">{{ item.content }}</div>
+                  </div>
+                </div>
+                <NForm label-placement="top"><div class="form-grid">
+                  <NFormItem label="模型"><NSelect v-model:value="chat.model" :options="modelOptions" filterable tag /></NFormItem>
+                  <NFormItem label="流式输出"><NSwitch v-model:value="chat.stream" :disabled="config.force_non_stream" /></NFormItem>
+                  <NFormItem label="内容" class="full"><NInput v-model:value="chat.input" type="textarea" placeholder="输入对话内容" :autosize="{ minRows: 4, maxRows: 10 }" @keydown.ctrl.enter.prevent="sendChat" /></NFormItem>
+                </div></NForm>
+                <div class="button-row"><NButton type="primary" :loading="testing" @click="sendChat"><template #icon><NIcon :component="PlayOutline" /></template>发送</NButton><NButton secondary @click="copyText(JSON.stringify(chat.messages, null, 2), '对话已复制')"><template #icon><NIcon :component="CopyOutline" /></template>复制对话</NButton></div>
+              </div>
+              <div class="panel span-4">
+                <h2 class="panel-title">调用说明</h2>
+                <pre class="code-box compact-code">{{ callGuide }}</pre>
               </div>
             </section>
 
@@ -494,6 +578,7 @@ onBeforeUnmount(() => {
                 <div class="button-row"><NButton type="primary" :loading="testing" @click="runTest"><template #icon><NIcon :component="PlayOutline" /></template>运行测试</NButton><NButton secondary @click="copyText(curlCommand, 'curl 已复制')"><template #icon><NIcon :component="ClipboardOutline" /></template>复制 curl</NButton><NButton secondary @click="test.result = ''"><template #icon><NIcon :component="TrashOutline" /></template>清空</NButton></div>
               </div>
               <div class="panel span-6"><h2 class="panel-title">响应</h2><pre class="code-box result-box">{{ test.result || '等待测试结果' }}</pre></div>
+              <div class="panel span-12"><div class="panel-head"><h2 class="panel-title">调用方法</h2><NButton text type="primary" @click="copyText(callGuide, '调用说明已复制')"><template #icon><NIcon :component="CopyOutline" /></template>复制说明</NButton></div><pre class="code-box compact-code">{{ callGuide }}</pre></div>
             </section>
 
             <section v-show="active === 'settings'" class="content-grid">
@@ -507,6 +592,7 @@ onBeforeUnmount(() => {
                     <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
                     <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
                     <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
+                    <NFormItem label="强制非流式输出"><NSwitch v-model:value="config.force_non_stream" /></NFormItem>
                     <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 https://your-project.vercel.app/v1" /></NFormItem>
                     <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></NFormItem>
                   </div>

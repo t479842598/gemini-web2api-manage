@@ -28,6 +28,10 @@ def _empty_response_fallback() -> str:
     )
 
 
+def _stream_allowed() -> bool:
+    return not bool(CONFIG.get("force_non_stream"))
+
+
 def _extract_text_from_response_payload(payload) -> str:
     """Extract assistant text from OpenAI- or Gemini-shaped response payloads."""
     texts = []
@@ -354,7 +358,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": {"message": "empty prompt"}}, 400)
             return
 
-        stream = req.get("stream", False)
+        stream = bool(req.get("stream", False)) and _stream_allowed()
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         if stream and (not tools or tool_choice == "none"):
@@ -520,7 +524,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             output.append({"type": "message", "id": mid, "role": "assistant", "status": "completed",
                            "content": [{"type": "output_text", "text": text or "", "annotations": []}]})
 
-        if req.get("stream"):
+        if req.get("stream") and _stream_allowed():
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
@@ -548,6 +552,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
     # ─── /v1beta/models (Google Gemini CLI) ──────────────────────────────────
 
     def _handle_google_generate(self, body: bytes, stream: bool):
+        stream = bool(stream) and _stream_allowed()
         req = self._parse_body(body)
         if req is None:
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
