@@ -8,6 +8,7 @@
   "api_keys": [
     "sk-gemini"
   ],
+  "admin_password": "sk-admin",
   "cookie_file": null,
   "proxy": null,
   "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",

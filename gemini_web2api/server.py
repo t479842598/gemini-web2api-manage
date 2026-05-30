@@ -12,7 +12,7 @@ from .models import MODELS, resolve_model
 from .gemini import generate, generate_stream, log
 from .tools import messages_to_prompt, parse_tool_calls, google_contents_to_prompt, parse_google_function_calls
 from .multimodal import upload_image, fetch_image_bytes
-from .admin import admin_static_status, log_status, read_admin_asset, read_admin_index, read_logs, save_config, service_urls
+from .admin import admin_config_payload, admin_static_status, clear_admin_cookie, log_status, make_admin_cookie, network_diagnostics, read_admin_asset, read_admin_index, read_logs, save_config, service_urls, verify_admin_cookie, verify_admin_password
 from . import __version__
 
 
@@ -131,11 +131,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         log(fmt % args)
 
-    def send_json(self, data, status=200):
+    def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -172,6 +174,15 @@ class GeminiHandler(BaseHTTPRequestHandler):
         key = auth[7:] if auth.startswith("Bearer ") else self.headers.get("x-api-key", "")
         return key in keys
 
+    def _admin_authorized(self):
+        return verify_admin_cookie(CONFIG, self.headers.get("Cookie", ""))
+
+    def _require_admin(self):
+        if self._admin_authorized():
+            return True
+        self.send_json({"error": {"message": "admin login required"}}, 401)
+        return False
+
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -188,10 +199,20 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 return
             if path in ("/admin", "/admin/"):
                 self.send_html(read_admin_index())
+            elif path == "/admin/api/auth":
+                self.send_json({"authenticated": self._admin_authorized()})
             elif path == "/admin/api/status":
+                if not self._require_admin():
+                    return
                 self._handle_admin_status()
             elif path == "/admin/api/logs":
+                if not self._require_admin():
+                    return
                 self._handle_admin_logs(parsed.query)
+            elif path == "/admin/api/network":
+                if not self._require_admin():
+                    return
+                self.send_json(network_diagnostics(CONFIG))
             elif path.startswith("/admin/"):
                 asset = read_admin_asset(path)
                 if asset:
@@ -227,7 +248,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 return
             length = int(self.headers.get("Content-Length", 0))
             body = self.rfile.read(length) if length else b""
-            if path == "/admin/api/config":
+            if path == "/admin/api/login":
+                self._handle_admin_login(body)
+            elif path == "/admin/api/logout":
+                self.send_json({"ok": True}, headers={"Set-Cookie": clear_admin_cookie()})
+            elif path == "/admin/api/config":
+                if not self._require_admin():
+                    return
                 self._handle_admin_config(body)
             elif path == "/v1/chat/completions":
                 self._handle_chat(body)
@@ -254,13 +281,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
             {"id": name, "description": cfg.get("desc", "")}
             for name, cfg in MODELS.items()
         ]
-        config = {
-            "cookie_file": CONFIG.get("cookie_file") or "",
-            "proxy": CONFIG.get("proxy") or "",
-            "default_model": CONFIG.get("default_model") or "",
-            "public_base_url": CONFIG.get("public_base_url") or "",
-            "empty_response_fallback": _empty_response_fallback(),
-        }
+        config = admin_config_payload(CONFIG)
+        config["empty_response_fallback"] = config["empty_response_fallback"] or _empty_response_fallback()
         self.send_json({
             "ok": True,
             "version": __version__,
@@ -285,6 +307,16 @@ class GeminiHandler(BaseHTTPRequestHandler):
             tail = 40000
         self.send_json(read_logs(offset=offset, tail=tail))
 
+    def _handle_admin_login(self, body: bytes):
+        req = self._parse_body(body)
+        if req is None:
+            self.send_json({"error": {"message": "invalid JSON"}}, 400)
+            return
+        if not verify_admin_password(CONFIG, req.get("password", "")):
+            self.send_json({"error": {"message": "invalid admin password"}}, 401)
+            return
+        self.send_json({"ok": True}, headers={"Set-Cookie": make_admin_cookie(CONFIG)})
+
     def _handle_admin_config(self, body: bytes):
         req = self._parse_body(body)
         if req is None:
@@ -295,13 +327,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
         except OSError as e:
             self.send_json({"error": {"message": f"save config failed: {e}"}}, 500)
             return
-        config = {
-            "cookie_file": updated.get("cookie_file") or "",
-            "proxy": updated.get("proxy") or "",
-            "default_model": updated.get("default_model") or "",
-            "public_base_url": updated.get("public_base_url") or "",
-            "empty_response_fallback": updated.get("empty_response_fallback") or _empty_response_fallback(),
-        }
+        config = admin_config_payload(updated)
+        config["empty_response_fallback"] = config["empty_response_fallback"] or _empty_response_fallback()
         self.send_json({"ok": True, "config": config})
 
     # ─── /v1/chat/completions ─────────────────────────────────────────────────

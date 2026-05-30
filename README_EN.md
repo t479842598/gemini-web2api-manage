@@ -6,7 +6,7 @@
 
 [中文文档](README.md)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 Convert Google Gemini's web interface into an OpenAI-compatible API. Zero authentication, zero cost, cross-platform.
 
@@ -44,7 +44,9 @@ The admin console is built with Vue 3 + Naive UI and is served by the Python pro
 
 | Page | What it does |
 |------|--------------|
+| Login | Default admin password is `sk-admin`; you can change it from Settings after signing in. |
 | Overview | Shows service health, version, model count, local/LAN/public URLs, log size, cookie state, proxy state, and whether the built admin assets are ready. |
+| Network | Gets local IP, public IP, location, ISP/ASN, and tests Gemini/Google connectivity. |
 | Service Test | Sends requests to OpenAI Chat Completions, OpenAI Responses, Google `generateContent`, or Google `streamGenerateContent`; supports model selection, streaming toggle, response preview, and curl copy. |
 | Settings | Edits `cookie_file`, `proxy`, `default_model`, `public_base_url`, and `empty_response_fallback`, then saves them back to `config.json`. |
 | Logs | Reads `logs/gemini_web2api.log`, supports incremental refresh, pause/resume auto refresh, copy, clear view, and scroll-to-bottom. |
@@ -175,6 +177,7 @@ Create `config.json` in the same directory:
   "retry_delay_sec": 2,
   "request_timeout_sec": 180,
   "api_keys": ["sk-your-key"],
+  "admin_password": "sk-admin",
   "cookie_file": null,
   "proxy": null,
   "default_model": "gemini-3.5-flash",
@@ -188,7 +191,7 @@ When `api_keys` is `[]`, authentication is disabled. When one or more keys are s
 
 ## Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 This repository includes `api/index.py` and `vercel.json`, so Vercel can run it as a Python Serverless Function. `/`, `/admin`, `/admin/api/*`, `/v1/*`, and `/v1beta/*` are routed to the same handler.
 
@@ -240,6 +243,7 @@ vercel --prod
 
 | Name | Required | Example | Description |
 |------|----------|---------|-------------|
+| `ADMIN_PASSWORD` | No | `sk-admin` | Web Admin Console password. Defaults to `sk-admin`; change it in production. |
 | `API_KEYS` | No | `sk-one,sk-two` | Comma-separated keys. Empty means no auth. Clients send `Authorization: Bearer <key>` or `x-api-key`. |
 | `GEMINI_COOKIE` | No | `SID=...; HSID=...; ...` | Full Gemini cookie string. Use this for real Pro routing on serverless deployments where `cookie_file` is not available. |
 | `DEFAULT_MODEL` | No | `gemini-3.5-flash-thinking` | Default model when the request omits `model`. |
@@ -265,6 +269,7 @@ Private use with API key:
 
 ```text
 API_KEYS=sk-your-private-key
+ADMIN_PASSWORD=change-this-admin-password
 DEFAULT_MODEL=gemini-3.5-flash-thinking
 PUBLIC_BASE_URL=https://your-project.vercel.app/v1
 ```

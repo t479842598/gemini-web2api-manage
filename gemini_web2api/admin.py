@@ -1,11 +1,16 @@
 """Admin console helpers and static asset serving."""
 import json
+import hashlib
+import hmac
 import mimetypes
 import os
 import socket
 import sys
+import time
 from pathlib import Path
 from urllib.parse import unquote
+import urllib.error
+import urllib.request
 
 
 ADMIN_HTML = """<!doctype html>
@@ -95,6 +100,113 @@ def admin_static_status() -> dict:
     }
 
 
+def admin_password(config: dict) -> str:
+    return str(config.get("admin_password") or os.environ.get("ADMIN_PASSWORD") or "sk-admin")
+
+
+def _session_signature(config: dict, expires: str, nonce: str) -> str:
+    secret = admin_password(config).encode("utf-8")
+    return hmac.new(secret, f"{expires}:{nonce}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def make_admin_cookie(config: dict, max_age: int = 7 * 24 * 3600) -> str:
+    expires = str(int(time.time()) + max_age)
+    nonce = hashlib.sha256(os.urandom(24)).hexdigest()[:24]
+    signature = _session_signature(config, expires, nonce)
+    value = f"{expires}.{nonce}.{signature}"
+    return f"gw_admin={value}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}"
+
+
+def clear_admin_cookie() -> str:
+    return "gw_admin=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"
+
+
+def verify_admin_password(config: dict, password: str) -> bool:
+    return hmac.compare_digest(str(password or ""), admin_password(config))
+
+
+def verify_admin_cookie(config: dict, cookie_header: str) -> bool:
+    cookies = {}
+    for item in (cookie_header or "").split(";"):
+        if "=" in item:
+            key, value = item.strip().split("=", 1)
+            cookies[key] = value
+    value = cookies.get("gw_admin")
+    if not value:
+        return False
+    try:
+        expires, nonce, signature = value.split(".", 2)
+        if int(expires) < int(time.time()):
+            return False
+    except (ValueError, TypeError):
+        return False
+    expected = _session_signature(config, expires, nonce)
+    return hmac.compare_digest(signature, expected)
+
+
+def admin_config_payload(config: dict) -> dict:
+    return {
+        "cookie_file": config.get("cookie_file") or "",
+        "proxy": config.get("proxy") or "",
+        "default_model": config.get("default_model") or "",
+        "public_base_url": config.get("public_base_url") or "",
+        "empty_response_fallback": config.get("empty_response_fallback") or "",
+        "api_keys": config.get("api_keys") or [],
+        "admin_password_set": bool(admin_password(config)),
+    }
+
+
+def _url_json(url: str, timeout: float = 8, proxy: str = None) -> dict:
+    opener = urllib.request.build_opener()
+    if proxy:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+    req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2api-admin/1.0"})
+    with opener.open(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8", errors="replace"))
+
+
+def _check_url(url: str, proxy: str = None, timeout: float = 8) -> dict:
+    started = time.time()
+    try:
+        opener = urllib.request.build_opener()
+        if proxy:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
+        req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2api-admin/1.0"})
+        with opener.open(req, timeout=timeout) as resp:
+            status = getattr(resp, "status", 200)
+        return {"ok": 200 <= status < 500, "status": status, "latency_ms": int((time.time() - started) * 1000)}
+    except Exception as exc:
+        return {"ok": False, "status": None, "latency_ms": int((time.time() - started) * 1000), "error": str(exc)}
+
+
+def network_diagnostics(config: dict) -> dict:
+    proxy = config.get("proxy") or None
+    public = {}
+    try:
+        public = _url_json("https://ipapi.co/json/", proxy=proxy)
+    except Exception as exc:
+        public = {"error": str(exc)}
+        try:
+            public.update(_url_json("https://api.ipify.org?format=json", proxy=proxy))
+        except Exception:
+            pass
+    return {
+        "local_ip": get_lan_ip(),
+        "public_ip": public.get("ip") or "",
+        "city": public.get("city") or "",
+        "region": public.get("region") or public.get("region_code") or "",
+        "country": public.get("country_name") or public.get("country") or "",
+        "org": public.get("org") or public.get("asn") or "",
+        "timezone": public.get("timezone") or "",
+        "proxy_enabled": bool(proxy),
+        "connectivity": {
+            "gemini": _check_url("https://gemini.google.com/", proxy=proxy),
+            "google": _check_url("https://www.google.com/generate_204", proxy=proxy),
+        },
+        "raw_error": public.get("error") or "",
+    }
+
+
 def app_dir() -> Path:
     return Path.cwd()
 
@@ -139,11 +251,22 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "default_model",
         "public_base_url",
         "empty_response_fallback",
+        "api_keys",
+        "admin_password",
     }
     data = read_config(current_config)
     for key in allowed:
         if key in updates:
             value = updates[key]
+            if key == "api_keys":
+                if isinstance(value, str):
+                    parts = value.replace(",", "\n").splitlines()
+                    data[key] = [item.strip() for item in parts if item.strip()]
+                elif isinstance(value, list):
+                    data[key] = [str(item).strip() for item in value if str(item).strip()]
+                continue
+            if key == "admin_password" and value in ("", None):
+                continue
             data[key] = value if value not in ("", None) else None
     config_path().write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     current_config.update(data)

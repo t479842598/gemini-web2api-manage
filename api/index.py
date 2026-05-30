@@ -31,6 +31,7 @@ def _apply_env_config() -> None:
         "PROXY": "proxy",
         "PUBLIC_BASE_URL": "public_base_url",
         "EMPTY_RESPONSE_FALLBACK": "empty_response_fallback",
+        "ADMIN_PASSWORD": "admin_password",
     }
     for env_name, config_name in mapping.items():
         value = os.environ.get(env_name)

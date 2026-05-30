@@ -6,7 +6,7 @@
 
 [English](README_EN.md)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 将 Google Gemini 网页端转换为 OpenAI 兼容 API. 零认证, 零成本, 跨平台.
 
@@ -44,7 +44,9 @@ Web 管理台地址是 `http://localhost:8081/admin`.
 
 | 页面 | 功能 |
 |------|------|
+| 登录 | 默认管理员密码是 `sk-admin`; 登录后可在配置页修改管理员密码. |
 | 概览 | 查看服务健康状态、版本、模型数量、本机/局域网/公网地址、日志大小、Cookie 状态、代理状态和前端构建状态. |
+| 网络 | 获取本机 IP、公网 IP、所在地区、运营商/ASN, 并测试 Gemini 与 Google 连通性. |
 | 服务测试 | 可测试 OpenAI Chat Completions、OpenAI Responses、Google `generateContent`、Google `streamGenerateContent`; 支持选择模型、流式开关、响应预览和复制 curl. |
 | 配置 | 编辑 `cookie_file`、`proxy`、`default_model`、`public_base_url`、`empty_response_fallback`, 并保存回 `config.json`. |
 | 日志 | 读取 `logs/gemini_web2api.log`, 支持增量刷新、暂停/恢复自动刷新、复制、清空视图和自动滚动到底部. |
@@ -175,6 +177,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
   "retry_delay_sec": 2,
   "request_timeout_sec": 180,
   "api_keys": ["sk-your-key"],
+  "admin_password": "sk-admin",
   "cookie_file": null,
   "proxy": null,
   "default_model": "gemini-3.5-flash",
@@ -188,7 +191,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 
 ## Vercel 部署
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2api&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 仓库已包含 `api/index.py` 和 `vercel.json`, Vercel 会把它作为 Python Serverless Function 运行. `/`、`/admin`、`/admin/api/*`、`/v1/*`、`/v1beta/*` 都会路由到同一个处理器.
 
@@ -240,6 +243,7 @@ vercel --prod
 
 | 变量名 | 必填 | 示例 | 说明 |
 |--------|------|------|------|
+| `ADMIN_PASSWORD` | 否 | `sk-admin` | Web 管理台登录密码. 不配置时默认 `sk-admin`, 建议生产环境改掉. |
 | `API_KEYS` | 否 | `sk-one,sk-two` | 多个密钥用英文逗号分隔. 留空表示不校验. 客户端用 `Authorization: Bearer <key>` 或 `x-api-key` 传入. |
 | `GEMINI_COOKIE` | 否 | `SID=...; HSID=...; ...` | 完整 Gemini Cookie 字符串. Vercel 不能挂载本地 `cookie_file`, 所以云端部署用这个变量. |
 | `DEFAULT_MODEL` | 否 | `gemini-3.5-flash-thinking` | 请求里没有 `model` 时使用的默认模型. |
@@ -265,6 +269,7 @@ LOG_REQUESTS=true
 
 ```text
 API_KEYS=sk-your-private-key
+ADMIN_PASSWORD=change-this-admin-password
 DEFAULT_MODEL=gemini-3.5-flash-thinking
 PUBLIC_BASE_URL=https://your-project.vercel.app/v1
 ```
