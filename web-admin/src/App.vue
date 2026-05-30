@@ -40,12 +40,20 @@ const { message } = createDiscreteApi(['message'])
 
 const themeOverrides = {
   common: {
-    primaryColor: '#2f6f73',
-    primaryColorHover: '#3f8589',
-    primaryColorPressed: '#245b5f',
+    primaryColor: '#18a058',
+    primaryColorHover: '#36ad6a',
+    primaryColorPressed: '#0c7a43',
+    primaryColorSuppl: '#36ad6a',
+    infoColor: '#2080f0',
+    infoColorHover: '#4098fc',
+    infoColorPressed: '#1060c9',
     borderRadius: '8px',
     fontFamily: 'Lato, "Microsoft YaHei UI", "Segoe UI", Arial, sans-serif',
     fontFamilyMono: '"Fira Code", Consolas, monospace'
+  },
+  Button: {
+    borderRadiusMedium: '8px',
+    fontWeight: '700'
   }
 }
 
@@ -94,6 +102,8 @@ const status = reactive({
 
 const config = reactive({
   cookie_file: '',
+  cookie_content: '',
+  cookie_source: {},
   proxy: '',
   default_model: '',
   public_base_url: '',
@@ -331,9 +341,11 @@ async function readLogs(reset = false) {
     logs.offset = data.offset
     logs.size = data.size
     logs.text = reset ? data.content : logs.text + data.content
+    if (!data.exists && reset) logs.text = data.error ? `日志暂不可用：${data.error}` : '暂无日志文件，服务产生输出后会显示在这里。'
     if (stickToBottom.value) await scrollLogs()
   } catch (err) {
-    message.error(`日志读取失败：${err.message}`)
+    if (reset) logs.text = `日志读取失败：${err.message}`
+    message.warning(`日志读取失败：${err.message}`)
   }
 }
 
@@ -485,20 +497,23 @@ onBeforeUnmount(() => {
             </section>
 
             <section v-show="active === 'settings'" class="content-grid">
-              <div class="panel span-8">
+              <div class="panel span-12 settings-panel">
                 <h2 class="panel-title">配置</h2>
                 <NForm label-placement="top">
-                  <NFormItem label="API 密钥"><NInput v-model:value="apiKeysText" type="textarea" placeholder="每行一个, 或用英文逗号分隔; 留空表示不校验" :autosize="{ minRows: 3, maxRows: 8 }" /></NFormItem>
-                  <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
-                  <NFormItem label="Cookie 文件路径"><NInput v-model:value="config.cookie_file" placeholder="例如 D:\\cookies\\gemini_cookie.json" /></NFormItem>
-                  <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
-                  <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
-                  <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 http://example.com:8881/v1" /></NFormItem>
-                  <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" /></NFormItem>
+                  <div class="form-grid settings-grid">
+                    <NFormItem label="API 密钥" class="full"><NInput v-model:value="apiKeysText" type="textarea" placeholder="每行一个, 或用英文逗号分隔; 留空表示不校验" :autosize="{ minRows: 2, maxRows: 5 }" /></NFormItem>
+                    <NFormItem label="Cookie 内容" class="full"><NInput v-model:value="config.cookie_content" type="textarea" placeholder="粘贴 SID=...; HSID=...; __Secure-1PSID=...，留空表示不修改当前 Cookie" :autosize="{ minRows: 3, maxRows: 7 }" /></NFormItem>
+                    <NFormItem label="Cookie 文件路径"><NInput v-model:value="config.cookie_file" placeholder="留空则保存到项目 cookie.txt；Vercel 建议用 GEMINI_COOKIE 环境变量" /></NFormItem>
+                    <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
+                    <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
+                    <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
+                    <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 https://your-project.vercel.app/v1" /></NFormItem>
+                    <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></NFormItem>
+                  </div>
                 </NForm>
                 <div class="button-row"><NButton type="primary" :loading="saving" @click="saveConfig"><template #icon><NIcon :component="SaveOutline" /></template>保存配置</NButton><NButton secondary @click="loadStatus(true)"><template #icon><NIcon :component="RefreshOutline" /></template>重新读取</NButton></div>
               </div>
-              <div class="panel span-4"><h2 class="panel-title">当前配置</h2><pre class="code-box">{{ pretty({ ...config, admin_password: config.admin_password ? '待更新' : '', api_keys: apiKeysText ? apiKeysText.split('\n').filter(Boolean) : [] }) }}</pre></div>
+              <div class="panel span-12"><h2 class="panel-title">当前配置</h2><pre class="code-box compact-code">{{ pretty({ ...config, cookie_content: config.cookie_content ? '待更新' : '', admin_password: config.admin_password ? '待更新' : '', api_keys: apiKeysText ? apiKeysText.split('\n').filter(Boolean) : [] }) }}</pre></div>
             </section>
 
             <section v-show="active === 'logs'" class="content-grid">

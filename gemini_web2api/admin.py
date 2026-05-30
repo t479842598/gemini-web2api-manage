@@ -147,6 +147,8 @@ def verify_admin_cookie(config: dict, cookie_header: str) -> bool:
 def admin_config_payload(config: dict) -> dict:
     return {
         "cookie_file": config.get("cookie_file") or "",
+        "cookie_content": "",
+        "cookie_source": cookie_status(config),
         "proxy": config.get("proxy") or "",
         "default_model": config.get("default_model") or "",
         "public_base_url": config.get("public_base_url") or "",
@@ -244,6 +246,37 @@ def read_config(default_config: dict) -> dict:
     return data
 
 
+def cookie_content_path() -> Path:
+    return app_dir() / "cookie.txt"
+
+
+def cookie_status(config: dict) -> dict:
+    env_cookie = os.environ.get("GEMINI_COOKIE")
+    cookie_file = config.get("cookie_file") or ""
+    target = Path(cookie_file) if cookie_file else cookie_content_path()
+    exists = False
+    size = 0
+    try:
+        stat = target.stat()
+        exists = target.is_file()
+        size = stat.st_size if exists else 0
+    except OSError:
+        pass
+    return {
+        "env": bool(env_cookie),
+        "path": str(target),
+        "exists": exists,
+        "size": size,
+    }
+
+
+def write_cookie_content(config: dict, content: str) -> str:
+    target = Path(config.get("cookie_file") or cookie_content_path())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content.strip() + "\n", encoding="utf-8")
+    return str(target)
+
+
 def save_config(current_config: dict, updates: dict) -> dict:
     allowed = {
         "cookie_file",
@@ -253,6 +286,7 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "empty_response_fallback",
         "api_keys",
         "admin_password",
+        "cookie_content",
     }
     data = read_config(current_config)
     for key in allowed:
@@ -264,6 +298,12 @@ def save_config(current_config: dict, updates: dict) -> dict:
                     data[key] = [item.strip() for item in parts if item.strip()]
                 elif isinstance(value, list):
                     data[key] = [str(item).strip() for item in value if str(item).strip()]
+                continue
+            if key == "cookie_content":
+                if value not in ("", None):
+                    cookie_file = write_cookie_content(data, str(value))
+                    data["cookie_file"] = cookie_file
+                    current_config["cookie_file"] = cookie_file
                 continue
             if key == "admin_password" and value in ("", None):
                 continue
@@ -290,19 +330,24 @@ def service_urls(host_header: str, port: int, public_base_url: str = None) -> di
 
 def read_logs(offset: int = None, tail: int = 40000) -> dict:
     path = log_path()
-    if not path.exists():
-        return {"content": "", "offset": 0, "size": 0}
-    size = path.stat().st_size
-    if offset is None:
-        offset = max(size - max(tail, 0), 0)
-    if offset < 0 or offset > size:
-        offset = 0
-    with path.open("rb") as fh:
-        fh.seek(offset)
-        data = fh.read()
-        new_offset = fh.tell()
-    return {
-        "content": data.decode("utf-8", errors="replace"),
-        "offset": new_offset,
-        "size": size,
-    }
+    try:
+        if not path.exists():
+            return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False}
+        size = path.stat().st_size
+        if offset is None:
+            offset = max(size - max(tail, 0), 0)
+        if offset < 0 or offset > size:
+            offset = 0
+        with path.open("rb") as fh:
+            fh.seek(offset)
+            data = fh.read()
+            new_offset = fh.tell()
+        return {
+            "content": data.decode("utf-8", errors="replace"),
+            "offset": new_offset,
+            "size": size,
+            "path": str(path),
+            "exists": True,
+        }
+    except OSError as exc:
+        return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False, "error": str(exc)}
