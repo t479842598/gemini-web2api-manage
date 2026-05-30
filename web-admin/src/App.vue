@@ -430,6 +430,25 @@ const callGuide = computed(() => {
   ].join('\n')
 })
 
+function parseChatResponse(text, streamed = false) {
+  if (!streamed) {
+    const data = JSON.parse(text)
+    return data?.choices?.[0]?.message?.content || data?.choices?.[0]?.delta?.content || ''
+  }
+  let answer = ''
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('data:')) continue
+    const payload = trimmed.slice(5).trim()
+    if (!payload || payload === '[DONE]') continue
+    try {
+      const data = JSON.parse(payload)
+      answer += data?.choices?.[0]?.delta?.content || data?.choices?.[0]?.message?.content || ''
+    } catch (_) {}
+  }
+  return answer
+}
+
 async function runTest() {
   testing.value = true
   test.result = '请求中...'
@@ -463,15 +482,15 @@ async function sendChat() {
   chat.input = ''
   testing.value = true
   try {
+    const streamed = chat.stream && !config.force_non_stream
     const res = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, stream: chat.stream && !config.force_non_stream })
+      body: JSON.stringify({ model, messages, stream: streamed })
     })
     const text = await res.text()
     if (!res.ok) throw new Error(pretty(text))
-    const data = JSON.parse(text)
-    const answer = data?.choices?.[0]?.message?.content || data?.choices?.[0]?.delta?.content || ''
+    const answer = parseChatResponse(text, streamed)
     chat.messages.push({ role: 'assistant', content: answer || config.empty_response_fallback || '空响应' })
   } catch (err) {
     chat.messages.push({ role: 'assistant', content: `调用失败：${err.message}` })
