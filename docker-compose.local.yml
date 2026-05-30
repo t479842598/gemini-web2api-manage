@@ -1,0 +1,9 @@
+services:
+  gemini-web2api:
+    build: .
+    container_name: gemini-web2api
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./config.json:/app/config.json
+    restart: unless-stopped

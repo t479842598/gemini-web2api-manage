@@ -1,0 +1,15 @@
+{
+  "port": 8081,
+  "host": "0.0.0.0",
+  "retry_attempts": 3,
+  "retry_delay_sec": 2,
+  "request_timeout_sec": 180,
+  "default_model": "gemini-3.5-flash",
+  "api_keys": [
+    "sk-gemini"
+  ],
+  "cookie_file": null,
+  "proxy": null,
+  "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+  "log_requests": true
+}

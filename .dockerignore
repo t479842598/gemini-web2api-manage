@@ -1,0 +1,9 @@
+.git
+.idea
+.venv
+__pycache__
+*.pyc
+config.json
+cookie.txt
+cookie.json
+.env

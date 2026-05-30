@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+config.json
+cookie.txt
+cookie.json
+.env
+.idea
+.DS_Store
+node_modules/
+web-admin/node_modules/
+web-admin/.vite/
+logs/*.log
+build/pyinstaller/**
+!build/pyinstaller/
+!build/pyinstaller/*.spec
