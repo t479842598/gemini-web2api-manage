@@ -233,7 +233,10 @@ class GeminiHandler(BaseHTTPRequestHandler):
                     for n, c in MODELS.items()
                 ]})
             elif path == "/":
-                self.send_json({"status": "ok", "version": __version__, "models": list(MODELS.keys())})
+                self.send_response(302)
+                self.send_header("Location", "/admin")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
             else:
                 self.send_json({"error": "not found"}, 404)
         except (BrokenPipeError, ConnectionResetError):
