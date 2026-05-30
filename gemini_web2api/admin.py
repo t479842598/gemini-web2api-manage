@@ -160,7 +160,7 @@ def _url_json(url: str, timeout: float = 8, proxy: str = None) -> dict:
     opener = urllib.request.build_opener()
     if proxy:
         opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
-    req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2api-admin/1.0"})
+    req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2ai-manage-admin/1.0"})
     with opener.open(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8", errors="replace"))
 
@@ -171,7 +171,7 @@ def _check_url(url: str, proxy: str = None, timeout: float = 8) -> dict:
         opener = urllib.request.build_opener()
         if proxy:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({"http": proxy, "https": proxy}))
-        req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2api-admin/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "gemini-web2ai-manage-admin/1.0"})
         with opener.open(req, timeout=timeout) as resp:
             status = getattr(resp, "status", 200)
         return {"ok": 200 <= status < 500, "status": status, "latency_ms": int((time.time() - started) * 1000)}
