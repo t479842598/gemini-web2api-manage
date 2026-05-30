@@ -49,6 +49,7 @@ def _apply_env_config() -> None:
         cookie_path = Path("/tmp/gemini_cookie.txt")
         cookie_path.write_text(cookie, encoding="utf-8")
         CONFIG["cookie_file"] = str(cookie_path)
+        CONFIG["cookie_files"] = [str(cookie_path)]
 
 
 _apply_env_config()

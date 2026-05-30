@@ -12,6 +12,7 @@ DEFAULT_CONFIG = {
     "default_model": "gemini-3.5-flash",
     "log_requests": True,
     "cookie_file": None,
+    "cookie_files": [],
     "proxy": None,
     "api_keys": [],
     "admin_password": "sk-admin",

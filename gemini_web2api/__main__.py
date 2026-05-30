@@ -26,6 +26,7 @@ def main():
         CONFIG["port"] = args.port
     if args.cookie_file:
         CONFIG["cookie_file"] = args.cookie_file
+        CONFIG["cookie_files"] = [args.cookie_file]
     if args.proxy:
         CONFIG["proxy"] = args.proxy
 

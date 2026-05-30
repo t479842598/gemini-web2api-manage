@@ -27,7 +27,6 @@ import {
   GlobeOutline,
   LogOutOutline,
   ChatbubbleEllipsesOutline,
-  OpenOutline,
   PlayOutline,
   RefreshOutline,
   SaveOutline,
@@ -84,6 +83,12 @@ const stickToBottom = ref(true)
 const logBox = ref(null)
 const logTimer = ref(null)
 const apiKeysText = ref('')
+const apiKeyItems = ref([])
+const apiKeyDraft = ref('')
+const editingApiKeyIndex = ref(null)
+const cookieItems = ref([])
+const cookieDraft = ref('')
+const editingCookieIndex = ref(null)
 
 const auth = reactive({
   checked: false,
@@ -104,7 +109,9 @@ const status = reactive({
 
 const config = reactive({
   cookie_file: '',
+  cookie_files: [],
   cookie_content: '',
+  cookie_contents: [],
   cookie_source: {},
   proxy: '',
   default_model: '',
@@ -213,8 +220,77 @@ function applyStatus(data) {
   Object.assign(status, data)
   Object.assign(config, data.config || {})
   config.admin_password = ''
-  apiKeysText.value = (data.config?.api_keys || []).join('\n')
+  apiKeyItems.value = [...(data.config?.api_keys || [])]
+  apiKeysText.value = apiKeyItems.value.join('\n')
+  cookieItems.value = (data.config?.cookie_files || []).map((path, index) => ({ path, content: '', label: `Cookie ${index + 1}` }))
   if (!test.model && status.models.length) test.model = status.models[0].id
+}
+
+function syncApiKeysText() {
+  apiKeysText.value = apiKeyItems.value.join('\n')
+}
+
+function maskSecret(value) {
+  if (!value) return '-'
+  if (value.length <= 10) return `${value.slice(0, 3)}***${value.slice(-2)}`
+  return `${value.slice(0, 7)}...${value.slice(-4)}`
+}
+
+function addApiKey() {
+  const value = apiKeyDraft.value.trim()
+  if (!value) return
+  if (editingApiKeyIndex.value !== null) {
+    apiKeyItems.value.splice(editingApiKeyIndex.value, 1, value)
+    editingApiKeyIndex.value = null
+  } else {
+    apiKeyItems.value.push(value)
+  }
+  apiKeyDraft.value = ''
+  syncApiKeysText()
+}
+
+function editApiKey(index) {
+  editingApiKeyIndex.value = index
+  apiKeyDraft.value = apiKeyItems.value[index]
+}
+
+function deleteApiKey(index) {
+  apiKeyItems.value.splice(index, 1)
+  if (editingApiKeyIndex.value === index) {
+    editingApiKeyIndex.value = null
+    apiKeyDraft.value = ''
+  }
+  syncApiKeysText()
+}
+
+function copyApiKey(index) {
+  copyText(apiKeyItems.value[index], 'API 密钥已复制')
+}
+
+function addCookie() {
+  const value = cookieDraft.value.trim()
+  if (!value) return
+  const row = { path: '', content: value, label: `Cookie ${editingCookieIndex.value === null ? cookieItems.value.length + 1 : editingCookieIndex.value + 1}` }
+  if (editingCookieIndex.value !== null) {
+    cookieItems.value.splice(editingCookieIndex.value, 1, row)
+    editingCookieIndex.value = null
+  } else {
+    cookieItems.value.push(row)
+  }
+  cookieDraft.value = ''
+}
+
+function editCookie(index) {
+  editingCookieIndex.value = index
+  cookieDraft.value = cookieItems.value[index].content || ''
+}
+
+function deleteCookie(index) {
+  cookieItems.value.splice(index, 1)
+  if (editingCookieIndex.value === index) {
+    editingCookieIndex.value = null
+    cookieDraft.value = ''
+  }
 }
 
 async function checkAuth() {
@@ -293,8 +369,16 @@ async function loadNetwork(showToast = false) {
 async function saveConfig() {
   saving.value = true
   try {
-    const apiKeys = apiKeysText.value.replace(/,/g, '\n').split('\n').map((item) => item.trim()).filter(Boolean)
-    const payload = { ...config, api_keys: apiKeys }
+    syncApiKeysText()
+    const cookieContents = cookieItems.value.map((item) => item.content).filter(Boolean)
+    const cookieFiles = cookieItems.value.filter((item) => !item.content && item.path).map((item) => item.path)
+    const payload = {
+      ...config,
+      api_keys: [...apiKeyItems.value],
+      cookie_files: cookieContents.length ? undefined : cookieFiles,
+      cookie_contents: cookieContents.length ? cookieContents : undefined,
+      cookie_content: ''
+    }
     const data = await api('/admin/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -302,7 +386,9 @@ async function saveConfig() {
     })
     Object.assign(config, data.config || {})
     config.admin_password = ''
-    apiKeysText.value = (data.config?.api_keys || []).join('\n')
+    apiKeyItems.value = [...(data.config?.api_keys || [])]
+    apiKeysText.value = apiKeyItems.value.join('\n')
+    cookieItems.value = (data.config?.cookie_files || []).map((path, index) => ({ path, content: '', label: `Cookie ${index + 1}` }))
     await loadStatus()
     message.success('配置已保存')
   } catch (err) {
@@ -586,9 +672,19 @@ onBeforeUnmount(() => {
                 <h2 class="panel-title">配置</h2>
                 <NForm label-placement="top">
                   <div class="form-grid settings-grid">
-                    <NFormItem label="API 密钥" class="full"><NInput v-model:value="apiKeysText" type="textarea" placeholder="每行一个, 或用英文逗号分隔; 留空表示不校验" :autosize="{ minRows: 2, maxRows: 5 }" /></NFormItem>
-                    <NFormItem label="Cookie 内容" class="full"><NInput v-model:value="config.cookie_content" type="textarea" placeholder="粘贴 SID=...; HSID=...; __Secure-1PSID=...，留空表示不修改当前 Cookie" :autosize="{ minRows: 3, maxRows: 7 }" /></NFormItem>
-                    <NFormItem label="Cookie 文件路径"><NInput v-model:value="config.cookie_file" placeholder="留空则保存到项目 cookie.txt；Vercel 建议用 GEMINI_COOKIE 环境变量" /></NFormItem>
+                    <NFormItem label="API 密钥" class="full">
+                      <div class="secret-manager">
+                        <div class="inline-editor"><NInput v-model:value="apiKeyDraft" type="password" show-password-on="click" placeholder="输入 API 密钥" @keyup.enter="addApiKey" /><NButton type="primary" @click="addApiKey">{{ editingApiKeyIndex === null ? '新增' : '保存' }}</NButton></div>
+                        <table class="secret-table"><thead><tr><th>序号</th><th>密钥</th><th>操作</th></tr></thead><tbody><tr v-if="!apiKeyItems.length"><td colspan="3" class="empty-cell">未启用密钥</td></tr><tr v-for="(item, index) in apiKeyItems" :key="`${item}-${index}`" @click="copyApiKey(index)"><td>{{ index + 1 }}</td><td class="secret-value">{{ editingApiKeyIndex === index ? item : maskSecret(item) }}</td><td><NSpace size="small" @click.stop><NButton size="small" secondary @click="editApiKey(index)">修改</NButton><NButton size="small" tertiary type="error" @click="deleteApiKey(index)">删除</NButton></NSpace></td></tr></tbody></table>
+                      </div>
+                    </NFormItem>
+                    <NFormItem label="Cookie" class="full">
+                      <div class="secret-manager">
+                        <NInput v-model:value="cookieDraft" type="textarea" placeholder="粘贴完整 Cookie；可新增多条，默认第一条有效" :autosize="{ minRows: 2, maxRows: 5 }" />
+                        <div class="button-row tight"><NButton type="primary" @click="addCookie">{{ editingCookieIndex === null ? '新增 Cookie' : '保存 Cookie' }}</NButton><NButton secondary @click="cookieDraft = ''; editingCookieIndex = null">取消</NButton></div>
+                        <table class="secret-table"><thead><tr><th>序号</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-if="!cookieItems.length"><td colspan="3" class="empty-cell">未配置 Cookie</td></tr><tr v-for="(item, index) in cookieItems" :key="`${item.path}-${index}`"><td>{{ index + 1 }}</td><td class="secret-value">{{ item.content ? maskSecret(item.content) : (item.path || '待保存') }}</td><td><NSpace size="small"><NButton size="small" secondary @click="editCookie(index)">修改</NButton><NButton size="small" tertiary type="error" @click="deleteCookie(index)">删除</NButton></NSpace></td></tr></tbody></table>
+                      </div>
+                    </NFormItem>
                     <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
                     <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
                     <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
@@ -599,7 +695,7 @@ onBeforeUnmount(() => {
                 </NForm>
                 <div class="button-row"><NButton type="primary" :loading="saving" @click="saveConfig"><template #icon><NIcon :component="SaveOutline" /></template>保存配置</NButton><NButton secondary @click="loadStatus(true)"><template #icon><NIcon :component="RefreshOutline" /></template>重新读取</NButton></div>
               </div>
-              <div class="panel span-12"><h2 class="panel-title">当前配置</h2><pre class="code-box compact-code">{{ pretty({ ...config, cookie_content: config.cookie_content ? '待更新' : '', admin_password: config.admin_password ? '待更新' : '', api_keys: apiKeysText ? apiKeysText.split('\n').filter(Boolean) : [] }) }}</pre></div>
+              <div class="panel span-12"><h2 class="panel-title">当前配置</h2><pre class="code-box compact-code">{{ pretty({ ...config, cookie_content: '', cookie_contents: cookieItems.map((item) => item.content ? '待更新' : item.path).filter(Boolean), admin_password: config.admin_password ? '待更新' : '', api_keys: apiKeyItems }) }}</pre></div>
             </section>
 
             <section v-show="active === 'logs'" class="content-grid">

@@ -18,7 +18,7 @@ except ImportError:
 from .config import CONFIG
 
 _ssl_ctx = None
-_cookie_cache = {"str": "", "sapisid": None, "mtime": 0}
+_cookie_cache = {"str": "", "sapisid": None, "mtime": 0, "path": ""}
 _httpx_client = None
 
 
@@ -47,28 +47,32 @@ def _get_httpx_client():
 
 def load_cookie() -> tuple:
     """Load cookie from file with mtime-based caching."""
-    cookie_file = CONFIG.get("cookie_file")
-    if not cookie_file or not os.path.exists(cookie_file):
-        return "", None
-    try:
-        mtime = os.path.getmtime(cookie_file)
-        if mtime == _cookie_cache["mtime"] and _cookie_cache["str"]:
-            return _cookie_cache["str"], _cookie_cache["sapisid"]
-        with open(cookie_file, "r") as f:
-            content = f.read().strip()
-        if content.startswith("{"):
-            data = json.loads(content)
-            cookie_str = data.get("cookie", "")
-            sapisid = data.get("sapisid", "")
-        else:
-            cookie_str = content
-            pairs = dict(p.split("=", 1) for p in cookie_str.split("; ") if "=" in p)
-            sapisid = pairs.get("SAPISID", "")
-        _cookie_cache.update({"str": cookie_str, "sapisid": sapisid or None, "mtime": mtime})
-        return cookie_str, sapisid if sapisid else None
-    except Exception as e:
-        log(f"Cookie load error: {e}")
-        return _cookie_cache["str"], _cookie_cache["sapisid"]
+    cookie_files = CONFIG.get("cookie_files") or []
+    if CONFIG.get("cookie_file"):
+        cookie_files = [CONFIG["cookie_file"], *cookie_files]
+    for cookie_file in dict.fromkeys(str(item) for item in cookie_files if item):
+        if not os.path.exists(cookie_file):
+            continue
+        try:
+            mtime = os.path.getmtime(cookie_file)
+            if cookie_file == _cookie_cache["path"] and mtime == _cookie_cache["mtime"] and _cookie_cache["str"]:
+                return _cookie_cache["str"], _cookie_cache["sapisid"]
+            with open(cookie_file, "r") as f:
+                content = f.read().strip()
+            if content.startswith("{"):
+                data = json.loads(content)
+                cookie_str = data.get("cookie", "")
+                sapisid = data.get("sapisid", "")
+            else:
+                cookie_str = content
+                pairs = dict(p.split("=", 1) for p in cookie_str.split("; ") if "=" in p)
+                sapisid = pairs.get("SAPISID", "")
+            if cookie_str:
+                _cookie_cache.update({"str": cookie_str, "sapisid": sapisid or None, "mtime": mtime, "path": cookie_file})
+                return cookie_str, sapisid if sapisid else None
+        except Exception as e:
+            log(f"Cookie load error ({cookie_file}): {e}")
+    return _cookie_cache["str"], _cookie_cache["sapisid"]
 
 
 def make_sapisidhash(sapisid: str) -> str:

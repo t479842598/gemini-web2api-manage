@@ -147,7 +147,9 @@ def verify_admin_cookie(config: dict, cookie_header: str) -> bool:
 def admin_config_payload(config: dict) -> dict:
     return {
         "cookie_file": config.get("cookie_file") or "",
+        "cookie_files": config.get("cookie_files") or ([config.get("cookie_file")] if config.get("cookie_file") else []),
         "cookie_content": "",
+        "cookie_contents": [],
         "cookie_source": cookie_status(config),
         "proxy": config.get("proxy") or "",
         "default_model": config.get("default_model") or "",
@@ -214,8 +216,26 @@ def app_dir() -> Path:
     return Path.cwd()
 
 
+def writable_app_dir() -> Path:
+    root = app_dir()
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+        probe = root / ".gemini_web2api_write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return root
+    except OSError:
+        fallback = Path(os.environ.get("TMPDIR") or "/tmp") / "gemini-web2api"
+        fallback.mkdir(parents=True, exist_ok=True)
+        return fallback
+
+
 def config_path() -> Path:
     return app_dir() / "config.json"
+
+
+def writable_config_path() -> Path:
+    return writable_app_dir() / "config.json"
 
 
 def log_path() -> Path:
@@ -235,8 +255,12 @@ def get_lan_ip() -> str:
 
 def read_config(default_config: dict) -> dict:
     data = dict(default_config)
-    path = config_path()
-    if path.exists():
+    paths = [config_path(), writable_config_path()]
+    seen = set()
+    for path in paths:
+        if path in seen or not path.exists():
+            continue
+        seen.add(path)
         try:
             with path.open("r", encoding="utf-8") as fh:
                 loaded = json.load(fh)
@@ -248,13 +272,21 @@ def read_config(default_config: dict) -> dict:
 
 
 def cookie_content_path() -> Path:
-    return app_dir() / "cookie.txt"
+    return writable_app_dir() / "cookie.txt"
 
 
 def cookie_status(config: dict) -> dict:
     env_cookie = os.environ.get("GEMINI_COOKIE")
-    cookie_file = config.get("cookie_file") or ""
-    target = Path(cookie_file) if cookie_file else cookie_content_path()
+    cookie_files = config.get("cookie_files") or ([config.get("cookie_file")] if config.get("cookie_file") else [])
+    target = Path(cookie_files[0]) if cookie_files else cookie_content_path()
+    files = []
+    for item in cookie_files:
+        path = Path(item)
+        try:
+            stat = path.stat()
+            files.append({"path": str(path), "exists": path.is_file(), "size": stat.st_size if path.is_file() else 0})
+        except OSError:
+            files.append({"path": str(path), "exists": False, "size": 0})
     exists = False
     size = 0
     try:
@@ -268,6 +300,7 @@ def cookie_status(config: dict) -> dict:
         "path": str(target),
         "exists": exists,
         "size": size,
+        "files": files,
     }
 
 
@@ -276,6 +309,19 @@ def write_cookie_content(config: dict, content: str) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content.strip() + "\n", encoding="utf-8")
     return str(target)
+
+
+def write_cookie_contents(contents: list) -> list:
+    paths = []
+    root = writable_app_dir()
+    for index, content in enumerate(contents, start=1):
+        value = str(content or "").strip()
+        if not value:
+            continue
+        target = root / f"cookie_{index}.txt"
+        target.write_text(value + "\n", encoding="utf-8")
+        paths.append(str(target))
+    return paths
 
 
 def save_config(current_config: dict, updates: dict) -> dict:
@@ -288,6 +334,8 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "api_keys",
         "admin_password",
         "cookie_content",
+        "cookie_contents",
+        "cookie_files",
         "force_non_stream",
     }
     data = read_config(current_config)
@@ -305,7 +353,28 @@ def save_config(current_config: dict, updates: dict) -> dict:
                 if value not in ("", None):
                     cookie_file = write_cookie_content(data, str(value))
                     data["cookie_file"] = cookie_file
+                    data["cookie_files"] = [cookie_file]
                     current_config["cookie_file"] = cookie_file
+                continue
+            if key == "cookie_contents":
+                if isinstance(value, list):
+                    cookie_files = write_cookie_contents(value)
+                    if cookie_files:
+                        data["cookie_files"] = cookie_files
+                        data["cookie_file"] = cookie_files[0]
+                        current_config["cookie_files"] = cookie_files
+                        current_config["cookie_file"] = cookie_files[0]
+                continue
+            if key == "cookie_files":
+                if isinstance(value, str):
+                    items = value.replace(",", "\n").splitlines()
+                elif isinstance(value, list):
+                    items = value
+                else:
+                    items = []
+                files = [str(item).strip() for item in items if str(item).strip()]
+                data["cookie_files"] = files
+                data["cookie_file"] = files[0] if files else None
                 continue
             if key == "force_non_stream":
                 data[key] = bool(value)
@@ -313,7 +382,7 @@ def save_config(current_config: dict, updates: dict) -> dict:
             if key == "admin_password" and value in ("", None):
                 continue
             data[key] = value if value not in ("", None) else None
-    config_path().write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    writable_config_path().write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     current_config.update(data)
     return data
 

@@ -57,6 +57,7 @@ DEFAULT_CONFIG = {
     "default_model": "gemini-3.5-flash",
     "log_requests": True,
     "cookie_file": None,
+    "cookie_files": [],
     "proxy": None,
     "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
     "admin_password": "sk-admin",
@@ -110,26 +111,28 @@ def stream_allowed() -> bool:
 
 def load_cookie() -> tuple:
     """Load cookie from file. Returns (cookie_str, sapisid)."""
-    cookie_file = CONFIG.get("cookie_file")
-    if not cookie_file:
-        return "", None
-    if not os.path.exists(cookie_file):
-        return "", None
-    try:
-        with open(cookie_file, "r") as f:
-            content = f.read().strip()
-        if content.startswith("{"):
-            data = json.loads(content)
-            cookie_str = data.get("cookie", "")
-            sapisid = data.get("sapisid", "")
-        else:
-            cookie_str = content
-            pairs = dict(p.split("=", 1) for p in cookie_str.split("; ") if "=" in p)
-            sapisid = pairs.get("SAPISID", "")
-        return cookie_str, sapisid if sapisid else None
-    except Exception as e:
-        log(f"Cookie load error: {e}")
-        return "", None
+    cookie_files = CONFIG.get("cookie_files") or []
+    if CONFIG.get("cookie_file"):
+        cookie_files = [CONFIG["cookie_file"], *cookie_files]
+    for cookie_file in dict.fromkeys(str(item) for item in cookie_files if item):
+        if not os.path.exists(cookie_file):
+            continue
+        try:
+            with open(cookie_file, "r") as f:
+                content = f.read().strip()
+            if content.startswith("{"):
+                data = json.loads(content)
+                cookie_str = data.get("cookie", "")
+                sapisid = data.get("sapisid", "")
+            else:
+                cookie_str = content
+                pairs = dict(p.split("=", 1) for p in cookie_str.split("; ") if "=" in p)
+                sapisid = pairs.get("SAPISID", "")
+            if cookie_str:
+                return cookie_str, sapisid if sapisid else None
+        except Exception as e:
+            log(f"Cookie load error ({cookie_file}): {e}")
+    return "", None
 
 
 def make_sapisidhash(sapisid: str) -> str:
@@ -1026,6 +1029,7 @@ def main():
         CONFIG["port"] = args.port
     if args.cookie_file:
         CONFIG["cookie_file"] = args.cookie_file
+        CONFIG["cookie_files"] = [args.cookie_file]
     if args.proxy:
         CONFIG["proxy"] = args.proxy
 
