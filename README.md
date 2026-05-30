@@ -6,7 +6,7 @@
 
 [English](README_EN.md)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 将 Google Gemini 网页端转换为 OpenAI 兼容 API. 零认证, 零成本, 跨平台.
 
@@ -191,7 +191,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 
 ## Vercel 部署
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 仓库已包含 `api/index.py` 和 `vercel.json`, Vercel 会把它作为 Python Serverless Function 运行. `/`、`/admin`、`/admin/api/*`、`/v1/*`、`/v1beta/*` 都会路由到同一个处理器.
 
@@ -206,7 +206,7 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
 ### 方式一: 一键部署
 
 1. 点击上方 **Deploy with Vercel** 按钮.
-2. Vercel 会打开新项目导入页, Repository 默认指向 `t479842598/gemini-web2ai-manage`.
+2. Vercel 会打开新项目导入页, Repository 默认指向 `t479842598/gemini-web2api-manage`.
 3. Project Name 可以保持默认, Framework Preset 选择 `Other` 或保持 Vercel 自动识别.
 4. 在 Environment Variables 页面按需填写变量. 只想先跑起来可以全部留空.
 5. 点击 **Deploy** 等待构建完成.

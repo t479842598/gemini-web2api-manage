@@ -6,7 +6,7 @@
 
 [中文文档](README.md)
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 Convert Google Gemini's web interface into an OpenAI-compatible API. Zero authentication, zero cost, cross-platform.
 
@@ -191,7 +191,7 @@ When `api_keys` is `[]`, authentication is disabled. When one or more keys are s
 
 ## Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2ai-manage%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage&env=ADMIN_PASSWORD,API_KEYS,GEMINI_COOKIE,DEFAULT_MODEL,PROXY,PUBLIC_BASE_URL&envDescription=Optional%20runtime%20settings%20for%20gemini-web2ai-manage&envLink=https%3A%2F%2Fgithub.com%2Ft479842598%2Fgemini-web2api-manage%23vercel)
 
 This repository includes `api/index.py` and `vercel.json`, so Vercel can run it as a Python Serverless Function. `/`, `/admin`, `/admin/api/*`, `/v1/*`, and `/v1beta/*` are routed to the same handler.
 
@@ -206,7 +206,7 @@ This repository includes `api/index.py` and `vercel.json`, so Vercel can run it 
 ### Option 1: one-click deploy
 
 1. Click **Deploy with Vercel** above.
-2. Vercel opens the new project import page. The repository defaults to `t479842598/gemini-web2ai-manage`.
+2. Vercel opens the new project import page. The repository defaults to `t479842598/gemini-web2api-manage`.
 3. Keep the default Project Name if you like. Framework Preset can be `Other` or Vercel auto-detection.
 4. Fill in Environment Variables only if needed. You can leave them empty for a first deployment.
 5. Click **Deploy** and wait for the build to finish.
