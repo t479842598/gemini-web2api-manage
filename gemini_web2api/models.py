@@ -16,6 +16,10 @@ MODELS = {
         "mode": 3, "think": 4,
         "desc": "Pro model (requires cookie for real routing)",
     },
+    "gemini-3.1-pro-enhanced": {
+        "mode": 3, "think": 4, "extra": {31: 2, 80: 3},
+        "desc": "Pro with enhanced output (experimental)",
+    },
     "gemini-auto": {
         "mode": 4, "think": 4,
         "desc": "Auto model selection",
@@ -32,7 +36,7 @@ MODELS = {
 
 
 def resolve_model(model_name: str, default: str = "gemini-3.5-flash"):
-    """Resolve model name to (name, mode_id, think_mode, error).
+    """Resolve model name to (name, mode_id, think_mode, error, extra_fields).
 
     Unknown model names fall back to default rather than erroring,
     since upstream clients may request arbitrary model identifiers.
@@ -43,7 +47,7 @@ def resolve_model(model_name: str, default: str = "gemini-3.5-flash"):
         try:
             think_override = int(think_str)
         except ValueError:
-            return None, None, None, f"Invalid think level: {think_str}"
+            return None, None, None, f"Invalid think level: {think_str}", None
     cfg = MODELS.get(model_name)
     if not cfg:
         from .gemini import log
@@ -52,4 +56,5 @@ def resolve_model(model_name: str, default: str = "gemini-3.5-flash"):
         cfg = MODELS[default]
     mode_id = cfg["mode"]
     think_mode = think_override if think_override is not None else cfg["think"]
-    return model_name, mode_id, think_mode, None
+    extra = cfg.get("extra")
+    return model_name, mode_id, think_mode, None, extra

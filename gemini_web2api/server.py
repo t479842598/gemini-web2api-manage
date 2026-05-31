@@ -28,10 +28,6 @@ def _empty_response_fallback() -> str:
     )
 
 
-def _stream_allowed() -> bool:
-    return not bool(CONFIG.get("force_non_stream"))
-
-
 def _extract_text_from_response_payload(payload) -> str:
     """Extract assistant text from OpenAI- or Gemini-shaped response payloads."""
     texts = []
@@ -345,7 +341,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         if req is None:
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
             return
-        model_name, model_id, think_mode, err = resolve_model(
+        model_name, model_id, think_mode, err, extra_fields = resolve_model(
             req.get("model", CONFIG["default_model"]))
         if err:
             self.send_json({"error": {"message": err}}, 400)
@@ -358,29 +354,16 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": {"message": "empty prompt"}}, 400)
             return
 
-        stream = bool(req.get("stream", False)) and _stream_allowed()
+        stream = req.get("stream", False)
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         if stream and (not tools or tool_choice == "none"):
-            started = False
-            emitted = False
             try:
-                file_refs = _upload_images(images)
                 self._start_sse()
-                started = True
-                chunk = _chat_stream_chunk(cid, model_name, {"role": "assistant"})
-                self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
-                self.wfile.flush()
-                for delta in generate_stream(prompt, model_id, think_mode, file_refs):
-                    if not delta:
-                        continue
-                    emitted = True
+                for delta in generate_stream(prompt, model_id, think_mode, _upload_images(images), extra_fields):
                     chunk = _chat_stream_chunk(cid, model_name, {"content": delta})
                     self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
                     self.wfile.flush()
-                if not emitted:
-                    chunk = _chat_stream_chunk(cid, model_name, {"content": _empty_response_fallback()})
-                    self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
                 end = _chat_stream_chunk(cid, model_name, {}, "stop")
                 self.wfile.write(f"data: {json.dumps(end, ensure_ascii=False)}\n\n".encode())
                 self.wfile.write(b"data: [DONE]\n\n")
@@ -389,24 +372,11 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 pass
             except Exception as e:
                 log(f"Stream error: {e}")
-                if started:
-                    try:
-                        if not emitted:
-                            chunk = _chat_stream_chunk(cid, model_name, {"content": _empty_response_fallback()})
-                            self.wfile.write(f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n".encode())
-                        end = _chat_stream_chunk(cid, model_name, {}, "stop")
-                        self.wfile.write(f"data: {json.dumps(end, ensure_ascii=False)}\n\n".encode())
-                        self.wfile.write(b"data: [DONE]\n\n")
-                        self.wfile.flush()
-                    except (BrokenPipeError, ConnectionResetError):
-                        pass
-                else:
-                    self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
             return
 
         try:
             text = _normalize_generated_text(
-                generate(prompt, model_id, think_mode, _upload_images(images))
+                generate(prompt, model_id, think_mode, _upload_images(images), extra_fields)
             )
         except Exception as e:
             self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
@@ -415,13 +385,6 @@ class GeminiHandler(BaseHTTPRequestHandler):
         tool_calls = None
         if tools and text and tool_choice != "none":
             text, tool_calls = parse_tool_calls(text)
-        if not text and not tool_calls:
-            log(
-                "空响应诊断: endpoint=/v1/chat/completions "
-                f"model={model_name} prompt_len={len(prompt)} stream={stream} "
-                f"tools={bool(tools)} images={len(images or [])} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
-            )
-            text = _empty_response_fallback()
         msg = {"role": "assistant", "content": text or None}
         if tool_calls:
             msg["tool_calls"] = tool_calls
@@ -450,7 +413,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         if req is None:
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
             return
-        model_name, model_id, think_mode, err = resolve_model(
+        model_name, model_id, think_mode, err, extra_fields = resolve_model(
             req.get("model", CONFIG["default_model"]))
         if err:
             self.send_json({"error": {"message": err}}, 400)
@@ -506,7 +469,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
         try:
             text = _normalize_generated_text(
-                generate(prompt, model_id, think_mode, _upload_images(images))
+                generate(prompt, model_id, think_mode, _upload_images(images), extra_fields)
             )
         except Exception as e:
             self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
@@ -515,14 +478,6 @@ class GeminiHandler(BaseHTTPRequestHandler):
         tool_calls = None
         if tools and text and tool_choice != "none":
             text, tool_calls = parse_tool_calls(text)
-        if not text and not tool_calls:
-            log(
-                "空响应诊断: endpoint=/v1/responses "
-                f"model={model_name} prompt_len={len(prompt)} stream={bool(req.get('stream')) and _stream_allowed()} "
-                f"tools={bool(tools)} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
-            )
-            text = _empty_response_fallback()
-
         rid = f"resp_{uuid.uuid4().hex[:16]}"
         mid = f"msg_{uuid.uuid4().hex[:12]}"
         output = []
@@ -534,7 +489,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             output.append({"type": "message", "id": mid, "role": "assistant", "status": "completed",
                            "content": [{"type": "output_text", "text": text or "", "annotations": []}]})
 
-        if req.get("stream") and _stream_allowed():
+        if req.get("stream"):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
@@ -562,14 +517,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
     # ─── /v1beta/models (Google Gemini CLI) ──────────────────────────────────
 
     def _handle_google_generate(self, body: bytes, stream: bool):
-        stream = bool(stream) and _stream_allowed()
         req = self._parse_body(body)
         if req is None:
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
             return
         m = re.match(r'/v1beta/models/([^:?]+)', self.path)
         model_name = m.group(1) if m else CONFIG["default_model"]
-        model_name, model_id, think_mode, err = resolve_model(model_name)
+        model_name, model_id, think_mode, err, extra_fields = resolve_model(model_name)
         if err:
             self.send_json({"error": {"message": err}}, 400)
             return
@@ -589,7 +543,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             try:
                 self._start_sse()
                 full_text = ""
-                for delta in generate_stream(prompt, model_id, think_mode, file_refs):
+                for delta in generate_stream(prompt, model_id, think_mode, file_refs, extra_fields):
                     if not delta:
                         continue
                     full_text += delta
@@ -612,20 +566,18 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 self.wfile.flush()
             except (BrokenPipeError, ConnectionResetError):
                 pass
+            except Exception as e:
+                log(f"Google stream error: {e}")
             return
 
         try:
-            text = _normalize_generated_text(generate(prompt, model_id, think_mode, file_refs))
+            text = _normalize_generated_text(generate(prompt, model_id, think_mode, file_refs, extra_fields))
         except Exception as e:
             self.send_json({"error": {"message": f"upstream error: {e}"}}, 502)
             return
 
         if not text:
-            log(
-                "空响应诊断: endpoint=/v1beta/models "
-                f"model={model_name} prompt_len={len(prompt)} stream={stream} "
-                f"tools={has_tools} images={len(images or [])} cookie={'已配置' if CONFIG.get('cookie_file') else '未配置'}"
-            )
+            log("Warning: empty response from Gemini")
 
         response_parts = []
         if has_tools and text:

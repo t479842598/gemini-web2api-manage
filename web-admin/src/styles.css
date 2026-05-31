@@ -301,6 +301,12 @@ textarea { font: inherit; }
 
 .result-box { min-height: 430px; }
 .log-box { min-height: calc(100vh - 230px); }
+.log-meta {
+  margin: -4px 0 12px;
+  color: var(--muted);
+  font: 12px/1.5 "Fira Code", Consolas, monospace;
+  overflow-wrap: anywhere;
+}
 .compact-code { min-height: 120px; max-height: none; }
 
 .chat-section {
@@ -347,6 +353,101 @@ textarea { font: inherit; }
   background: linear-gradient(135deg, #ff8dc7 0%, #7ec8f5 100%);
   box-shadow: 0 8px 20px rgba(255, 140, 200, 0.22);
 }
+
+.chat-message.user .chat-bubble :deep(p) { margin: 0; }
+.chat-message.user .chat-bubble :deep(code) { background: rgba(255,255,255,0.18); padding: 1px 5px; border-radius: 4px; }
+
+.chat-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-start;
+  opacity: 0;
+  transition: opacity .18s ease;
+}
+.chat-message:hover .chat-actions { opacity: 1; }
+
+.thinking-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 16px 20px !important;
+}
+.thinking-dots span {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: thinking-bounce 1.2s ease-in-out infinite;
+}
+.thinking-dots span:nth-child(2) { animation-delay: .2s; }
+.thinking-dots span:nth-child(3) { animation-delay: .4s; }
+
+@keyframes thinking-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: .4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Markdown rendered content styling */
+.chat-bubble h1, .chat-bubble h2, .chat-bubble h3,
+.chat-bubble h4, .chat-bubble h5, .chat-bubble h6 {
+  margin: .6em 0 .3em;
+  font-size: inherit;
+  font-weight: 700;
+}
+.chat-bubble h1 { font-size: 1.25em; }
+.chat-bubble h2 { font-size: 1.15em; }
+.chat-bubble h3 { font-size: 1.08em; }
+.chat-bubble p { margin: .4em 0; }
+.chat-bubble p:first-child { margin-top: 0; }
+.chat-bubble p:last-child { margin-bottom: 0; }
+.chat-bubble ul, .chat-bubble ol { padding-left: 1.5em; margin: .4em 0; }
+.chat-bubble li { margin: .2em 0; }
+.chat-bubble code {
+  background: rgba(128, 128, 128, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: "Fira Code", Consolas, monospace;
+  font-size: .92em;
+}
+.chat-bubble pre {
+  background: #0d1420;
+  color: #d7e5f7;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: .6em 0;
+  font-size: .9em;
+  line-height: 1.45;
+}
+.chat-bubble pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.chat-bubble blockquote {
+  border-left: 3px solid #e2e8f0;
+  margin: .4em 0;
+  padding: .2em .8em;
+  color: #667085;
+}
+.chat-bubble table {
+  border-collapse: collapse;
+  margin: .4em 0;
+  font-size: .92em;
+}
+.chat-bubble th, .chat-bubble td {
+  border: 1px solid #e2e8f0;
+  padding: 6px 10px;
+  text-align: left;
+}
+.chat-bubble th {
+  background: rgba(0,0,0,0.03);
+  font-weight: 700;
+}
+.chat-bubble a { color: #2080f0; text-decoration: underline; }
+.chat-bubble hr { border: 0; border-top: 1px solid #e2e8f0; margin: .6em 0; }
+.chat-bubble img { max-width: 100%; border-radius: 6px; }
 
 @media (max-width: 1060px) {
   .app-shell { grid-template-columns: 1fr; }

@@ -79,6 +79,7 @@ def read_admin_asset(path: str):
 
 def log_status() -> dict:
     path = log_path()
+    candidates = log_path_candidates()
     try:
         stat = path.stat()
         return {
@@ -86,9 +87,10 @@ def log_status() -> dict:
             "exists": True,
             "size": stat.st_size,
             "modified": int(stat.st_mtime),
+            "candidates": [str(item) for item in candidates],
         }
     except OSError:
-        return {"path": str(path), "exists": False, "size": 0, "modified": None}
+        return {"path": str(path), "exists": False, "size": 0, "modified": None, "candidates": [str(item) for item in candidates]}
 
 
 def admin_static_status() -> dict:
@@ -144,12 +146,29 @@ def verify_admin_cookie(config: dict, cookie_header: str) -> bool:
     return hmac.compare_digest(signature, expected)
 
 
+def read_cookie_file_content(path: str) -> str:
+    try:
+        p = Path(path)
+        if p.is_file():
+            text = p.read_text(encoding="utf-8").strip()
+            lines = text.splitlines()
+            return lines[0] if lines else ""
+    except Exception:
+        pass
+    return ""
+
+
 def admin_config_payload(config: dict) -> dict:
+    files = config.get("cookie_files") or ([config.get("cookie_file")] if config.get("cookie_file") else [])
+    contents = []
+    for fp in files:
+        content = read_cookie_file_content(fp)
+        contents.append(content)
     return {
         "cookie_file": config.get("cookie_file") or "",
-        "cookie_files": config.get("cookie_files") or ([config.get("cookie_file")] if config.get("cookie_file") else []),
-        "cookie_content": "",
-        "cookie_contents": [],
+        "cookie_files": files,
+        "cookie_content": contents[0] if contents else "",
+        "cookie_contents": contents,
         "cookie_source": cookie_status(config),
         "proxy": config.get("proxy") or "",
         "default_model": config.get("default_model") or "",
@@ -239,7 +258,43 @@ def writable_config_path() -> Path:
 
 
 def log_path() -> Path:
-    return app_dir() / "logs" / "gemini_web2api.log"
+    candidates = log_path_candidates()
+    existing = []
+    for path in candidates:
+        try:
+            stat = path.stat()
+            if path.is_file():
+                existing.append((stat.st_mtime, stat.st_size, path))
+        except OSError:
+            pass
+    if existing:
+        return max(existing, key=lambda item: (item[0], item[1]))[2]
+    return candidates[0]
+
+
+def log_path_candidates() -> list:
+    paths = []
+    env_path = os.environ.get("GEMINI_WEB2API_LOG_FILE")
+    if env_path:
+        paths.append(Path(env_path).expanduser())
+    paths.extend([
+        app_dir() / "logs" / "gemini_web2api.log",
+        package_dir().parent / "logs" / "gemini_web2api.log",
+    ])
+    if getattr(sys, "frozen", False):
+        paths.append(Path(sys.executable).resolve().parent / "logs" / "gemini_web2api.log")
+    unique = []
+    seen = set()
+    for path in paths:
+        try:
+            key = str(path.resolve())
+        except OSError:
+            key = str(path.absolute())
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
 
 
 def get_lan_ip() -> str:
@@ -339,49 +394,62 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "force_non_stream",
     }
     data = read_config(current_config)
+
+    # Phase 1: process non-cookie-files keys first
     for key in allowed:
-        if key in updates:
-            value = updates[key]
-            if key == "api_keys":
-                if isinstance(value, str):
-                    parts = value.replace(",", "\n").splitlines()
-                    data[key] = [item.strip() for item in parts if item.strip()]
-                elif isinstance(value, list):
-                    data[key] = [str(item).strip() for item in value if str(item).strip()]
-                continue
-            if key == "cookie_content":
-                if value not in ("", None):
-                    cookie_file = write_cookie_content(data, str(value))
-                    data["cookie_file"] = cookie_file
-                    data["cookie_files"] = [cookie_file]
-                    current_config["cookie_file"] = cookie_file
-                continue
-            if key == "cookie_contents":
-                if isinstance(value, list):
-                    cookie_files = write_cookie_contents(value)
-                    if cookie_files:
-                        data["cookie_files"] = cookie_files
-                        data["cookie_file"] = cookie_files[0]
-                        current_config["cookie_files"] = cookie_files
-                        current_config["cookie_file"] = cookie_files[0]
-                continue
-            if key == "cookie_files":
-                if isinstance(value, str):
-                    items = value.replace(",", "\n").splitlines()
-                elif isinstance(value, list):
-                    items = value
-                else:
-                    items = []
-                files = [str(item).strip() for item in items if str(item).strip()]
-                data["cookie_files"] = files
-                data["cookie_file"] = files[0] if files else None
-                continue
-            if key == "force_non_stream":
-                data[key] = bool(value)
-                continue
-            if key == "admin_password" and value in ("", None):
-                continue
-            data[key] = value if value not in ("", None) else None
+        if key not in updates:
+            continue
+        value = updates[key]
+        if key == "api_keys":
+            if isinstance(value, str):
+                parts = value.replace(",", "\n").splitlines()
+                data[key] = [item.strip() for item in parts if item.strip()]
+            elif isinstance(value, list):
+                data[key] = [str(item).strip() for item in value if str(item).strip()]
+            continue
+        if key == "cookie_content":
+            if value not in ("", None):
+                cookie_file = write_cookie_content(data, str(value))
+                data["cookie_file"] = cookie_file
+                data["cookie_files"] = [cookie_file]
+                current_config["cookie_file"] = cookie_file
+            continue
+        if key == "cookie_contents":
+            if isinstance(value, list) and any(v for v in value if str(v).strip()):
+                new_files = write_cookie_contents(value)
+                if new_files:
+                    existing = data.get("cookie_files") or []
+                    combined = list(dict.fromkeys(existing + new_files))
+                    data["cookie_files"] = combined
+                    data["cookie_file"] = combined[0]
+                    current_config["cookie_files"] = combined
+                    current_config["cookie_file"] = combined[0]
+            continue
+        if key == "force_non_stream":
+            data[key] = bool(value)
+            continue
+        if key == "admin_password" and value in ("", None):
+            continue
+        if key in ("cookie_files",):
+            continue
+        data[key] = value if value not in ("", None) else None
+
+    # Phase 2: process cookie_files (preserving any new paths from cookie_contents)
+    if "cookie_files" in updates:
+        value = updates["cookie_files"]
+        if isinstance(value, str):
+            items = value.replace(",", "\n").splitlines()
+        elif isinstance(value, list):
+            items = value
+        else:
+            items = []
+        files = [str(item).strip() for item in items if str(item).strip()]
+        existing = data.get("cookie_files") or []
+        combined = list(dict.fromkeys(files + existing))
+        if combined:
+            data["cookie_files"] = combined
+            data["cookie_file"] = combined[0]
+
     writable_config_path().write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     current_config.update(data)
     return data
@@ -404,9 +472,10 @@ def service_urls(host_header: str, port: int, public_base_url: str = None) -> di
 
 def read_logs(offset: int = None, tail: int = 40000) -> dict:
     path = log_path()
+    candidates = [str(item) for item in log_path_candidates()]
     try:
         if not path.exists():
-            return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False}
+            return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False, "candidates": candidates}
         size = path.stat().st_size
         if offset is None:
             offset = max(size - max(tail, 0), 0)
@@ -422,6 +491,7 @@ def read_logs(offset: int = None, tail: int = 40000) -> dict:
             "size": size,
             "path": str(path),
             "exists": True,
+            "candidates": candidates,
         }
     except OSError as exc:
-        return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False, "error": str(exc)}
+        return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False, "candidates": candidates, "error": str(exc)}
