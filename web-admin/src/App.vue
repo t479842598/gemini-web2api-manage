@@ -10,6 +10,7 @@ import {
   NFormItem,
   NIcon,
   NInput,
+  NInputNumber,
   NMessageProvider,
   NSelect,
   NSpace,
@@ -119,6 +120,9 @@ const config = reactive({
   cookie_contents: [],
   cookie_source: {},
   proxy: '',
+  gemini_base_url: '',
+  auth_user: null,
+  xsrf_token: '',
   default_model: '',
   public_base_url: '',
   empty_response_fallback: '',
@@ -910,6 +914,9 @@ onBeforeUnmount(() => {
                     </NFormItem>
                     <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
                     <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
+                    <NFormItem label="Gemini Base URL"><NInput v-model:value="config.gemini_base_url" placeholder="留空默认 https://gemini.google.com" /></NFormItem>
+                    <NFormItem label="Google 账号序号"><NInputNumber v-model:value="config.auth_user" clearable placeholder="默认账号留空；第二账号填 1" /></NFormItem>
+                    <NFormItem label="XSRF Token"><NInput v-model:value="config.xsrf_token" type="password" show-password-on="click" placeholder="可选：Gemini 请求参数 at" /></NFormItem>
                     <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
                     <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 https://your-project.vercel.app/v1" /></NFormItem>
                     <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></NFormItem>

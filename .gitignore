@@ -10,6 +10,11 @@ node_modules/
 web-admin/node_modules/
 web-admin/.vite/
 logs/*.log
+.lrnev/agents/
+.lrnev/locks/
+.lrnev/runtime/
+gemini-web2api-oran/
+gemini-web2api-oran.zip
 build/pyinstaller/**
 !build/pyinstaller/
 !build/pyinstaller/*.spec

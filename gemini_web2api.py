@@ -54,7 +54,10 @@ DEFAULT_CONFIG = {
     "retry_attempts": 3,
     "retry_delay_sec": 2,
     "request_timeout_sec": 180,
+    "gemini_base_url": None,
     "gemini_bl": "boq_assistant-bard-web-server_20260525.09_p0",
+    "auth_user": None,
+    "xsrf_token": None,
     "default_model": "gemini-3.5-flash",
     "log_requests": True,
     "cookie_file": None,
@@ -167,6 +170,52 @@ def make_sapisidhash(sapisid: str) -> str:
     return f"SAPISIDHASH {ts}_{h}"
 
 
+def gemini_base_url() -> str:
+    return str(CONFIG.get("gemini_base_url") or "https://gemini.google.com").rstrip("/")
+
+
+def account_prefix() -> str:
+    auth_user = CONFIG.get("auth_user")
+    if auth_user is None or auth_user == "":
+        return ""
+    return f"/u/{auth_user}"
+
+
+def gemini_request_params(outer: list) -> dict:
+    params = {"f.req": json.dumps(outer)}
+    if CONFIG.get("xsrf_token"):
+        params["at"] = CONFIG["xsrf_token"]
+    return params
+
+
+def gemini_request_headers() -> dict:
+    prefix = account_prefix()
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Origin": "https://gemini.google.com",
+        "Referer": f"https://gemini.google.com{prefix}/app",
+        "X-Same-Domain": "1",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    }
+    if prefix:
+        headers["X-Goog-AuthUser"] = str(CONFIG["auth_user"])
+    cookie_str, sapisid = load_cookie()
+    if cookie_str:
+        headers["Cookie"] = cookie_str
+    if sapisid:
+        headers["Authorization"] = make_sapisidhash(sapisid)
+    return headers
+
+
+def gemini_request_url() -> str:
+    reqid = int(time.time()) % 1000000
+    return (
+        f"{gemini_base_url()}{account_prefix()}/_/BardChatUi/data/"
+        "assistant.lamda.BardFrontendService/StreamGenerate"
+        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
+    )
+
+
 # ─── Gemini Protocol ─────────────────────────────────────────────────────────
 
 def gemini_stream_generate(prompt: str, model_id: int, think_mode: int, extra_fields: dict = None) -> str:
@@ -194,26 +243,9 @@ def gemini_stream_generate(prompt: str, model_id: int, think_mode: int, extra_fi
             inner[key] = value
 
     outer = [None, json.dumps(inner)]
-    body = urllib.parse.urlencode({"f.req": json.dumps(outer)}).encode()
-    reqid = int(time.time()) % 1000000
-    url = (
-        "https://gemini.google.com/_/BardChatUi/data/"
-        "assistant.lamda.BardFrontendService/StreamGenerate"
-        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
-    )
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Origin": "https://gemini.google.com",
-        "Referer": "https://gemini.google.com/app",
-        "X-Same-Domain": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-
-    cookie_str, sapisid = load_cookie()
-    if cookie_str:
-        headers["Cookie"] = cookie_str
-    if sapisid:
-        headers["Authorization"] = make_sapisidhash(sapisid)
+    body = urllib.parse.urlencode(gemini_request_params(outer)).encode()
+    url = gemini_request_url()
+    headers = gemini_request_headers()
 
     last_err = None
     for attempt in range(CONFIG["retry_attempts"]):
@@ -263,25 +295,9 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, ext
             inner[key] = value
 
     outer = [None, json.dumps(inner)]
-    body = urllib.parse.urlencode({"f.req": json.dumps(outer)})
-    reqid = int(time.time()) % 1000000
-    url = (
-        "https://gemini.google.com/_/BardChatUi/data/"
-        "assistant.lamda.BardFrontendService/StreamGenerate"
-        f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
-    )
-    headers = {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Origin": "https://gemini.google.com",
-        "Referer": "https://gemini.google.com/app",
-        "X-Same-Domain": "1",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-    }
-    cookie_str, sapisid = load_cookie()
-    if cookie_str:
-        headers["Cookie"] = cookie_str
-    if sapisid:
-        headers["Authorization"] = make_sapisidhash(sapisid)
+    body = urllib.parse.urlencode(gemini_request_params(outer))
+    url = gemini_request_url()
+    headers = gemini_request_headers()
 
     proxy = CONFIG.get("proxy")
 
@@ -300,6 +316,9 @@ def gemini_stream_generate_iter(prompt: str, model_id: int, think_mode: int, ext
             buf = ""
             for chunk in resp.iter_text():
                 buf += chunk
+                bard_err = re.search(r'BardErrorInfo\s*\[(\d+)\]', buf)
+                if bard_err:
+                    raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{bard_err.group(1)}]")
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
                     if '"wrb.fr"' not in line or len(line) < 200:
@@ -346,6 +365,9 @@ def clean_gemini_text(text: str) -> str:
 
 def extract_response_text(raw: str) -> str:
     """Parse StreamGenerate response to extract final text."""
+    bard_err = re.search(r'BardErrorInfo\s*\[(\d+)\]', raw)
+    if bard_err:
+        raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{bard_err.group(1)}]")
     texts = []
     for line in raw.split("\n"):
         if '"wrb.fr"' not in line or len(line) < 200:
@@ -1031,6 +1053,9 @@ def load_config(path: str):
         with open(path, encoding="utf-8") as f:
             CONFIG.update(json.load(f))
         log(f"Config loaded: {path}")
+    gemini_base_url = os.environ.get("GEMINI_BASE_URL")
+    if gemini_base_url:
+        CONFIG["gemini_base_url"] = gemini_base_url
 
 
 def main():

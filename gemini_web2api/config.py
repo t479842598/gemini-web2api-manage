@@ -8,7 +8,10 @@ DEFAULT_CONFIG = {
     "retry_attempts": 3,
     "retry_delay_sec": 2,
     "request_timeout_sec": 180,
+    "gemini_base_url": None,
     "gemini_bl": "boq_assistant-bard-web-server_20260525.09_p0",
+    "auth_user": None,
+    "xsrf_token": None,
     "default_model": "gemini-3.5-flash",
     "log_requests": True,
     "cookie_file": None,
@@ -23,11 +26,19 @@ DEFAULT_CONFIG = {
 CONFIG = dict(DEFAULT_CONFIG)
 
 
+def apply_env_config():
+    """Apply deployment-specific environment overrides."""
+    gemini_base_url = os.environ.get("GEMINI_BASE_URL")
+    if gemini_base_url:
+        CONFIG["gemini_base_url"] = gemini_base_url
+
+
 def load_config(path: str = None):
     """Load config from JSON file."""
     if path and os.path.exists(path):
         with open(path, encoding="utf-8") as f:
             CONFIG.update(json.load(f))
+    apply_env_config()
     return CONFIG
 
 

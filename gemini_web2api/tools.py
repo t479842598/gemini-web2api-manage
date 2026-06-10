@@ -3,6 +3,32 @@ import json
 import re
 import uuid
 import base64
+import io
+
+MAX_IMAGE_B64_SIZE = 50000  # ~37KB raw image
+
+
+def _compress_b64_if_needed(b64: str) -> str:
+    """Compress image if base64 is too large for text embedding."""
+    if len(b64) <= MAX_IMAGE_B64_SIZE:
+        return b64
+    try:
+        from PIL import Image
+        img_data = base64.b64decode(b64)
+        img = Image.open(io.BytesIO(img_data))
+        # Resize to max 256px on longest side
+        max_dim = 256
+        ratio = min(max_dim / img.width, max_dim / img.height)
+        if ratio < 1:
+            img = img.resize((int(img.width * ratio), int(img.height * ratio)), Image.LANCZOS)
+        # Convert to JPEG with quality reduction
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="JPEG", quality=60)
+        compressed = base64.b64encode(buf.getvalue()).decode()
+        return compressed
+    except Exception:
+        # If PIL not available, truncate (model will get partial data)
+        return b64[:MAX_IMAGE_B64_SIZE]
 
 
 def _build_tool_choice_instruction(tool_choice, tool_defs: list) -> str:
@@ -63,20 +89,9 @@ def messages_to_prompt(messages: list, tools: list = None, tool_choice=None) -> 
                 if c.get("type") in ("text", "input_text"):
                     text_parts.append(c.get("text", ""))
                 elif c.get("type") == "image_url":
-                    url = c.get("image_url", {}).get("url", "")
-                    if url.startswith("data:"):
-                        header, b64 = url.split(",", 1) if "," in url else ("", "")
-                        mime = "image/png"
-                        if ":" in header:
-                            mime = header.split(";")[0].split(":")[1]
-                        images.append((base64.b64decode(b64), mime))
-                    else:
-                        images.append((url, None))
+                    text_parts.append("[Note: Image input not supported in this API. Please describe the image in text.]")
                 elif c.get("type") == "image":
-                    src = c.get("source", {})
-                    if src.get("type") == "base64":
-                        mime = src.get("media_type", "image/png")
-                        images.append((base64.b64decode(src["data"]), mime))
+                    text_parts.append("[Note: Image input not supported in this API. Please describe the image in text.]")
             content = " ".join(text_parts)
 
         if role == "system":

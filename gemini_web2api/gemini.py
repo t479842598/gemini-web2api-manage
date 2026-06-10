@@ -107,14 +107,28 @@ def make_sapisidhash(sapisid: str) -> str:
     return f"SAPISIDHASH {ts}_{h}"
 
 
+def _gemini_base_url() -> str:
+    return str(CONFIG.get("gemini_base_url") or "https://gemini.google.com").rstrip("/")
+
+
+def _account_prefix() -> str:
+    auth_user = CONFIG.get("auth_user")
+    if auth_user is None or auth_user == "":
+        return ""
+    return f"/u/{auth_user}"
+
+
 def _build_headers() -> dict:
+    account_prefix = _account_prefix()
     headers = {
         "Content-Type": "application/x-www-form-urlencoded",
         "Origin": "https://gemini.google.com",
-        "Referer": "https://gemini.google.com/app",
+        "Referer": f"https://gemini.google.com{account_prefix}/app",
         "X-Same-Domain": "1",
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
     }
+    if account_prefix:
+        headers["X-Goog-AuthUser"] = str(CONFIG["auth_user"])
     cookie_str, sapisid = load_cookie()
     if cookie_str:
         headers["Cookie"] = cookie_str
@@ -150,13 +164,17 @@ def _build_payload(prompt: str, model_id: int, think_mode: int, file_refs: list 
         for key, value in extra_fields.items():
             inner[key] = value
     outer = [None, json.dumps(inner)]
-    return urllib.parse.urlencode({"f.req": json.dumps(outer)})
+    params = {"f.req": json.dumps(outer)}
+    if CONFIG.get("xsrf_token"):
+        params["at"] = CONFIG["xsrf_token"]
+    return urllib.parse.urlencode(params)
 
 
 def _get_url() -> str:
     reqid = int(time.time()) % 1000000
+    account_prefix = _account_prefix()
     return (
-        "https://gemini.google.com/_/BardChatUi/data/"
+        f"{_gemini_base_url()}{account_prefix}/_/BardChatUi/data/"
         "assistant.lamda.BardFrontendService/StreamGenerate"
         f"?bl={CONFIG['gemini_bl']}&hl=en&_reqid={reqid}&rt=c"
     )
@@ -196,6 +214,9 @@ def _extract_texts_from_line(line: str) -> list:
 
 def extract_response_text(raw: str) -> str:
     """Parse full response to get final text."""
+    bard_err = re.search(r'BardErrorInfo\s*\[(\d+)\]', raw)
+    if bard_err:
+        raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{bard_err.group(1)}]")
     last_text = ""
     for line in raw.split("\n"):
         for t in _extract_texts_from_line(line):
@@ -255,6 +276,9 @@ def generate_stream(prompt: str, model_id: int, think_mode: int, file_refs: list
                 buf = ""
                 for chunk in resp.iter_text():
                     buf += chunk
+                    bard_err = re.search(r'BardErrorInfo\s*\[(\d+)\]', buf)
+                    if bard_err:
+                        raise RuntimeError(f"Gemini upstream rejected request: BardErrorInfo [{bard_err.group(1)}]")
                     while "\n" in buf:
                         line, buf = buf.split("\n", 1)
                         for t in _extract_texts_from_line(line):
