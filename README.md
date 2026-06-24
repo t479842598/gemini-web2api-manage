@@ -28,13 +28,32 @@
 
 ## 快速开始
 
+### 方式一：本地运行（推荐）
+
 ```bash
-python gemini_web2api.py
+# 1. 安装依赖
+pip install httpx
+
+# 2. 配置 Cookie（可选，可匿名使用）
+#    复制 .env.example 为 .env，填入你的 Gemini Cookie
+cp .env.example .env
+
+# 3. 启动服务
+python -m gemini_web2api
 ```
 
-服务启动在 `http://localhost:8081/v1`.
+服务启动在 `http://localhost:8081/v1`. Web 管理台地址是 `http://localhost:8081/admin`.
 
-Web 管理台地址是 `http://localhost:8081/admin`.
+### 方式二：桌面管理器（Windows）
+
+双击 `manager.pyw` 启动桌面管理器，支持一键启动、关闭、重启、查看日志。
+
+### 方式三：Docker
+
+```bash
+docker build -t gemini-web2api .
+docker run -p 8081:8081 -e GEMINI_COOKIE="your_cookie" gemini-web2api
+```
 
 ## Web 管理台
 
@@ -139,11 +158,26 @@ gemini-3.5-flash-thinking@think=4   # 最浅
 
 ## 可选: Cookie 配置 (Pro 模型)
 
-匿名访问对所有模型有效, 但 `gemini-3.1-pro` 在无认证时会路由到 Flash. 要获得真正的 Pro 路由, 提供 cookie 文件:
+匿名访问对所有模型有效, 但 `gemini-3.1-pro` 在无认证时会路由到 Flash. 要获得真正的 Pro 路由, 提供 Cookie.
+
+### 方式一：.env 文件（推荐）
+
+复制 `.env.example` 为 `.env`，填入 Cookie 字符串：
 
 ```bash
-python gemini_web2api.py --cookie-file cookie.txt
+cp .env.example .env
+# 编辑 .env，设置 GEMINI_COOKIE="SID=xxx; HSID=xxx; ..."
 ```
+
+### 方式二：命令行参数
+
+```bash
+python -m gemini_web2api --cookie-file cookie.txt
+```
+
+### 方式三：环境变量 (Vercel/Serverless)
+
+在 Vercel 环境变量中设置 `GEMINI_COOKIE`。
 
 ### 如何获取 Cookie
 

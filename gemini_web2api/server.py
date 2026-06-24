@@ -516,6 +516,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
 
     # ─── /v1beta/models (Google Gemini CLI) ──────────────────────────────────
 
+    def _build_google_usage(self, prompt: str, text: str) -> dict:
+        return {
+            "promptTokenCount": len(prompt) // 4,
+            "candidatesTokenCount": len(text or "") // 4,
+            "totalTokenCount": (len(prompt) + len(text or "")) // 4,
+        }
+
     def _handle_google_generate(self, body: bytes, stream: bool):
         req = self._parse_body(body)
         if req is None:
@@ -539,6 +546,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         file_refs = _upload_images(images)
         log(f"Google API: model={model_name} stream={stream} tools={has_tools} prompt_len={len(prompt)}")
 
+        # True streaming (no tools)
         if stream and not has_tools:
             try:
                 self._start_sse()
@@ -555,11 +563,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
                     self.wfile.flush()
                 final_chunk = {
                     "candidates": [{"finishReason": "STOP", "index": 0}],
-                    "usageMetadata": {
-                        "promptTokenCount": len(prompt) // 4,
-                        "candidatesTokenCount": len(full_text) // 4,
-                        "totalTokenCount": (len(prompt) + len(full_text)) // 4,
-                    },
+                    "usageMetadata": self._build_google_usage(prompt, full_text),
                     "modelVersion": model_name,
                 }
                 self.wfile.write(f"data: {json.dumps(final_chunk, ensure_ascii=False)}\n\n".encode())
@@ -570,6 +574,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
                 log(f"Google stream error: {e}")
             return
 
+        # Non-streaming (or streaming with tools - need full response)
         try:
             text = _normalize_generated_text(generate(prompt, model_id, think_mode, file_refs, extra_fields))
         except Exception as e:
@@ -592,19 +597,13 @@ class GeminiHandler(BaseHTTPRequestHandler):
         else:
             response_parts.append({"text": text or "I apologize, but I was unable to generate a response. Please try again."})
 
-        candidate = {
-            "content": {"parts": response_parts, "role": "model"},
-            "finishReason": "STOP",
-            "index": 0,
-        }
-        usage = {
-            "promptTokenCount": len(prompt) // 4,
-            "candidatesTokenCount": len(text or "") // 4,
-            "totalTokenCount": (len(prompt) + len(text or "")) // 4,
-        }
         response_obj = {
-            "candidates": [candidate],
-            "usageMetadata": usage,
+            "candidates": [{
+                "content": {"parts": response_parts, "role": "model"},
+                "finishReason": "STOP",
+                "index": 0,
+            }],
+            "usageMetadata": self._build_google_usage(prompt, text),
             "modelVersion": model_name,
         }
 

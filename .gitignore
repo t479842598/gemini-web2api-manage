@@ -4,6 +4,8 @@ config.json
 cookie.txt
 cookie.json
 .env
+.env.local
+*.env
 .idea
 .DS_Store
 node_modules/
@@ -15,6 +17,7 @@ logs/*.log
 .lrnev/runtime/
 gemini-web2api-oran/
 gemini-web2api-oran.zip
-build/pyinstaller/**
-!build/pyinstaller/
-!build/pyinstaller/*.spec
+*.exe
+build/
+dist/
+*.egg-info/

@@ -8,6 +8,7 @@ import urllib.parse
 import ssl
 import os
 import hashlib
+import threading
 from pathlib import Path
 
 try:
@@ -20,7 +21,7 @@ from .config import CONFIG
 
 _ssl_ctx = None
 _cookie_cache = {"str": "", "sapisid": None, "mtime": 0, "path": ""}
-_httpx_client = None
+_httpx_local = threading.local()
 
 
 _log_file = None
@@ -63,12 +64,15 @@ def _get_ssl_ctx():
 
 
 def _get_httpx_client():
-    global _httpx_client
-    if _httpx_client is None and HAS_HTTPX:
+    """Get per-thread httpx.Client (thread-safe via threading.local())."""
+    if not HAS_HTTPX:
+        return None
+    client = getattr(_httpx_local, "client", None)
+    if client is None:
         proxy = CONFIG.get("proxy")
         transport = httpx.HTTPTransport(proxy=proxy) if proxy else None
-        _httpx_client = httpx.Client(transport=transport, timeout=CONFIG["request_timeout_sec"], verify=True)
-    return _httpx_client
+        _httpx_local.client = httpx.Client(transport=transport, timeout=CONFIG["request_timeout_sec"], verify=True)
+    return _httpx_local.client
 
 
 def load_cookie() -> tuple:

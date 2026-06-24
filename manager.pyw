@@ -23,7 +23,6 @@ from tkinter import messagebox, scrolledtext, ttk
 
 
 APP_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
-SERVER_SCRIPT = APP_DIR / "gemini_web2api.py"
 SERVER_EXE = APP_DIR / ("gemini_web2api_server.exe" if os.name == "nt" else "gemini_web2api_server")
 CONFIG_FILE = APP_DIR / "config.json"
 LOG_DIR = APP_DIR / "logs"
@@ -395,7 +394,7 @@ class GeminiManager(tk.Tk):
         if SERVER_EXE.exists():
             cmd = [str(SERVER_EXE), "--port", str(port)]
         else:
-            cmd = [get_python_executable(), "-u", str(SERVER_SCRIPT), "--port", str(port)]
+            cmd = [get_python_executable(), "-m", "gemini_web2api", "--port", str(port)]
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"
