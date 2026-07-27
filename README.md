@@ -139,7 +139,8 @@ gemini
 
 | 模型 | 说明 | 输出量 |
 |------|------|--------|
-| `gemini-3.5-flash` | 快速通用 | ~1.2万字 |
+| `gemini-3.6-flash` | 最新快速通用模型 | ~1.2万字 |
+| `gemini-3.5-flash` | `gemini-3.6-flash` 兼容别名 | ~1.2万字 |
 | `gemini-3.5-flash-thinking` | 深度思考, 最长输出 | **~2万字** |
 | `gemini-3.5-flash-thinking-lite` | 自适应思考深度 | ~1.5万字 |
 | `gemini-3.1-pro` | Pro (需 cookie 才能真正路由) | ~1.2万字 |
@@ -214,14 +215,14 @@ SID=你的SID值; HSID=你的HSID值; SSID=你的SSID值; APISID=你的APISID值
   "admin_password": "sk-admin",
   "cookie_file": null,
   "proxy": null,
-  "default_model": "gemini-3.5-flash",
+  "default_model": "gemini-3.6-flash",
   "public_base_url": null,
   "empty_response_fallback": "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、上下文过长或当前模型暂不可用。请查看管理台日志中的空响应诊断后重试。",
   "log_requests": true
 }
 ```
 
-`api_keys` 为空数组 `[]` 时不校验密钥；填入一个或多个密钥后, `/v1/*` 接口需要 `Authorization: Bearer <key>` 或 `x-api-key: <key>`.
+`api_keys` 为空数组 `[]` 时不校验密钥；填入一个或多个密钥后, `/v1/*` 和 `/v1beta/*` 接口支持 `Authorization: Bearer <key>`、`x-api-key`、`x-goog-api-key` 或 `?key=<key>`.
 
 ## Vercel 部署
 
@@ -280,7 +281,7 @@ vercel --prod
 | `ADMIN_PASSWORD` | 否 | `sk-admin` | Web 管理台登录密码. 不配置时默认 `sk-admin`, 建议生产环境改掉. |
 | `API_KEYS` | 否 | `sk-one,sk-two` | 多个密钥用英文逗号分隔. 留空表示不校验. 客户端用 `Authorization: Bearer <key>` 或 `x-api-key` 传入. |
 | `GEMINI_COOKIE` | 否 | `SID=...; HSID=...; ...` | 完整 Gemini Cookie 字符串. Vercel 不能挂载本地 `cookie_file`, 所以云端部署用这个变量. |
-| `DEFAULT_MODEL` | 否 | `gemini-3.5-flash-thinking` | 请求里没有 `model` 时使用的默认模型. |
+| `DEFAULT_MODEL` | 否 | `gemini-3.6-flash` | 请求里没有 `model` 时使用的默认模型. |
 | `PROXY` | 否 | `http://user:pass@host:port` | 上游访问 Gemini 时使用的 HTTP/HTTPS 代理. 注意不要填写 SOCKS 地址. |
 | `PUBLIC_BASE_URL` | 否 | `https://your-project.vercel.app/v1` | 管理台里展示的公网调用地址. |
 | `GEMINI_BL` | 否 | `boq_assistant-bard-web-server_...` | Gemini 网页端 build label, 一般保持默认即可. |

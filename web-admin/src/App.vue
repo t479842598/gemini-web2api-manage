@@ -128,7 +128,8 @@ const config = reactive({
   empty_response_fallback: '',
   api_keys: [],
   force_non_stream: false,
-  admin_password: ''
+  admin_password: '',
+  gemini_bl: ''
 })
 
 const network = reactive({
@@ -146,14 +147,14 @@ const network = reactive({
 
 const test = reactive({
   endpoint: 'chat',
-  model: 'gemini-3.5-flash',
+  model: 'gemini-3.6-flash',
   stream: false,
   prompt: '你好，请用一句话说明当前服务是否可用。',
   result: ''
 })
 
 const chat = reactive({
-  model: 'gemini-3.5-flash',
+  model: 'gemini-3.6-flash',
   stream: false,
   input: '',
   messages: [],
@@ -198,7 +199,7 @@ const logMetaText = computed(() => {
 })
 
 function selectedModel(value) {
-  return value && value !== '__all__' ? value : (config.default_model || status.models[0]?.id || 'gemini-3.5-flash')
+  return value && value !== '__all__' ? value : (config.default_model || status.models[0]?.id || 'gemini-3.6-flash')
 }
 
 const curlCommand = computed(() => {
@@ -724,6 +725,10 @@ onBeforeUnmount(() => {
                   <NStatistic label="代理" :value="proxyState" />
                   <NStatistic label="API 密钥" :value="apiKeysText ? '已启用' : '未启用'" />
                   <NStatistic label="管理台目录" :value="status.admin_static?.ready ? 'ready' : 'missing'" />
+                  <NStatistic label="Gemini BL" :value="config.gemini_bl || '-'" />
+                  <NStatistic label="流式模式" :value="config.force_non_stream ? '强制非流式' : '正常流式'" />
+                  <NStatistic label="CLI 兼容" :value="'/v1beta 已启用'" />
+                  <NStatistic label="鉴权模式" :value="apiKeyItems.length ? '密钥鉴权' : '无鉴权'" />
                 </NSpace>
               </div>
             </section>
@@ -917,6 +922,8 @@ onBeforeUnmount(() => {
                     <NFormItem label="Gemini Base URL"><NInput v-model:value="config.gemini_base_url" placeholder="留空默认 https://gemini.google.com" /></NFormItem>
                     <NFormItem label="Google 账号序号"><NInputNumber v-model:value="config.auth_user" clearable placeholder="默认账号留空；第二账号填 1" /></NFormItem>
                     <NFormItem label="XSRF Token"><NInput v-model:value="config.xsrf_token" type="password" show-password-on="click" placeholder="可选：Gemini 请求参数 at" /></NFormItem>
+                    <NFormItem label="Gemini BL"><NInput v-model:value="config.gemini_bl" placeholder="boq_assistant-bard-web-server_YYYYMMDD.00_p0" /></NFormItem>
+                    <NFormItem label="强制非流式"><NSwitch v-model:value="config.force_non_stream" /></NFormItem>
                     <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
                     <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 https://your-project.vercel.app/v1" /></NFormItem>
                     <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></NFormItem>

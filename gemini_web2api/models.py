@@ -4,9 +4,13 @@
 #   1=FAST, 2=THINKING, 3=PRO, 4=AUTO, 5=FAST_DYNAMIC_THINKING, 6=FLASH_LITE
 
 MODELS = {
+    "gemini-3.6-flash": {
+        "mode": 1, "think": 4,
+        "desc": "Latest all-around model (Gemini 3.6 Flash)",
+    },
     "gemini-3.5-flash": {
         "mode": 1, "think": 4,
-        "desc": "Fast general-purpose model",
+        "desc": "Alias for gemini-3.6-flash (backend upgraded)",
     },
     "gemini-3.5-flash-thinking": {
         "mode": 2, "think": 0,
@@ -35,7 +39,7 @@ MODELS = {
 }
 
 
-def resolve_model(model_name: str, default: str = "gemini-3.5-flash"):
+def resolve_model(model_name: str, default: str = "gemini-3.6-flash"):
     """Resolve model name to (name, mode_id, think_mode, error, extra_fields).
 
     Unknown model names fall back to default rather than erroring,

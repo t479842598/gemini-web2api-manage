@@ -178,6 +178,7 @@ def admin_config_payload(config: dict) -> dict:
         "public_base_url": config.get("public_base_url") or "",
         "empty_response_fallback": config.get("empty_response_fallback") or "",
         "api_keys": config.get("api_keys") or [],
+        "gemini_bl": config.get("gemini_bl") or "",
         "force_non_stream": bool(config.get("force_non_stream")),
         "admin_password_set": bool(admin_password(config)),
     }
@@ -398,6 +399,7 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "cookie_contents",
         "cookie_files",
         "force_non_stream",
+        "gemini_bl",
     }
     data = read_config(current_config)
 

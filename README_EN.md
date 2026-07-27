@@ -120,7 +120,8 @@ Supports Google native API endpoints:
 
 | Model | Description | Output |
 |-------|-------------|--------|
-| `gemini-3.5-flash` | Fast general-purpose | ~12k chars |
+| `gemini-3.6-flash` | Latest fast general-purpose model | ~12k chars |
+| `gemini-3.5-flash` | Compatibility alias for `gemini-3.6-flash` | ~12k chars |
 | `gemini-3.5-flash-thinking` | Deep thinking, longest output | **~20k chars** |
 | `gemini-3.5-flash-thinking-lite` | Adaptive thinking depth | ~15k chars |
 | `gemini-3.1-pro` | Pro (needs cookie for real routing) | ~12k chars |
@@ -180,14 +181,14 @@ Create `config.json` in the same directory:
   "admin_password": "sk-admin",
   "cookie_file": null,
   "proxy": null,
-  "default_model": "gemini-3.5-flash",
+  "default_model": "gemini-3.6-flash",
   "public_base_url": null,
   "empty_response_fallback": "Gemini returned empty content. Possible causes: invalid Cookie, content blocked by safety policy, overly long context, or a temporarily unavailable model. Check empty-response diagnostics in the admin logs and retry.",
   "log_requests": true
 }
 ```
 
-When `api_keys` is `[]`, authentication is disabled. When one or more keys are set, `/v1/*` endpoints require `Authorization: Bearer <key>` or `x-api-key: <key>`.
+When `api_keys` is `[]`, authentication is disabled. When one or more keys are set, `/v1/*` and `/v1beta/*` endpoints support `Authorization: Bearer <key>`, `x-api-key`, `x-goog-api-key`, or `?key=<key>`.
 
 ## Vercel
 
@@ -246,7 +247,7 @@ vercel --prod
 | `ADMIN_PASSWORD` | No | `sk-admin` | Web Admin Console password. Defaults to `sk-admin`; change it in production. |
 | `API_KEYS` | No | `sk-one,sk-two` | Comma-separated keys. Empty means no auth. Clients send `Authorization: Bearer <key>` or `x-api-key`. |
 | `GEMINI_COOKIE` | No | `SID=...; HSID=...; ...` | Full Gemini cookie string. Use this for real Pro routing on serverless deployments where `cookie_file` is not available. |
-| `DEFAULT_MODEL` | No | `gemini-3.5-flash-thinking` | Default model when the request omits `model`. |
+| `DEFAULT_MODEL` | No | `gemini-3.6-flash` | Default model when the request omits `model`. |
 | `PROXY` | No | `http://user:pass@host:port` | HTTP/HTTPS proxy used by upstream Gemini requests. Do not use SOCKS URLs here. |
 | `PUBLIC_BASE_URL` | No | `https://your-project.vercel.app/v1` | Public URL displayed in the admin console. |
 | `GEMINI_BL` | No | `boq_assistant-bard-web-server_...` | Gemini web build label. Usually leave the default. |

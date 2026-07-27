@@ -5,10 +5,10 @@
   "retry_delay_sec": 2,
   "request_timeout_sec": 180,
   "gemini_base_url": null,
-  "gemini_bl": "boq_assistant-bard-web-server_20260525.09_p0",
+  "gemini_bl": "boq_assistant-bard-web-server_20260716.08_p0",
   "auth_user": null,
   "xsrf_token": null,
-  "default_model": "gemini-3.5-flash",
+  "default_model": "gemini-3.6-flash",
   "api_keys": [
     "sk-gemini"
   ],

@@ -129,7 +129,8 @@ def _upload_images(images: list) -> list:
 
 class GeminiHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        log(fmt % args)
+        client_ip = self.client_address[0] if self.client_address else "-"
+        log(f"{client_ip} {fmt % args}")
 
     def send_json(self, data, status=200, headers=None):
         body = json.dumps(data, ensure_ascii=False).encode()
@@ -170,9 +171,20 @@ class GeminiHandler(BaseHTTPRequestHandler):
         keys = CONFIG.get("api_keys") or []
         if not keys:
             return True
+        # Authorization: Bearer <key>
         auth = self.headers.get("Authorization", "")
-        key = auth[7:] if auth.startswith("Bearer ") else self.headers.get("x-api-key", "")
-        return key in keys
+        if auth.startswith("Bearer ") and auth[7:] in keys:
+            return True
+        # header keys (OpenAI x-api-key / Google x-goog-api-key)
+        for h in ("x-api-key", "x-goog-api-key"):
+            if self.headers.get(h, "") in keys:
+                return True
+        # query param ?key= (Gemini CLI native style)
+        if "?" in self.path:
+            for pair in self.path.split("?", 1)[1].split("&"):
+                if pair.startswith("key=") and pair[4:] in keys:
+                    return True
+        return False
 
     def _admin_authorized(self):
         return verify_admin_cookie(CONFIG, self.headers.get("Cookie", ""))
@@ -194,7 +206,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = parsed.path
-            if path.startswith("/v1/") and not self._authorized():
+            if path.startswith("/v1") and not self._authorized():
                 self.send_json({"error": {"message": "invalid api key"}}, 401)
                 return
             if path in ("/admin", "/admin/"):
@@ -246,7 +258,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             path = parsed.path
-            if path.startswith("/v1/") and not self._authorized():
+            if path.startswith("/v1") and not self._authorized():
                 self.send_json({"error": {"message": "invalid api key"}}, 401)
                 return
             length = int(self.headers.get("Content-Length", 0))
@@ -354,7 +366,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
             self.send_json({"error": {"message": "empty prompt"}}, 400)
             return
 
-        stream = req.get("stream", False)
+        stream = bool(req.get("stream", False)) and not CONFIG.get("force_non_stream")
         cid = f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
         if stream and (not tools or tool_choice == "none"):
@@ -489,7 +501,8 @@ class GeminiHandler(BaseHTTPRequestHandler):
             output.append({"type": "message", "id": mid, "role": "assistant", "status": "completed",
                            "content": [{"type": "output_text", "text": text or "", "annotations": []}]})
 
-        if req.get("stream"):
+        stream = bool(req.get("stream")) and not CONFIG.get("force_non_stream")
+        if stream:
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-cache")
@@ -524,6 +537,7 @@ class GeminiHandler(BaseHTTPRequestHandler):
         }
 
     def _handle_google_generate(self, body: bytes, stream: bool):
+        stream = bool(stream) and not CONFIG.get("force_non_stream")
         req = self._parse_body(body)
         if req is None:
             self.send_json({"error": {"message": "invalid JSON"}}, 400)
