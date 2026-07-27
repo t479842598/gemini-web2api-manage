@@ -52,3 +52,27 @@
 **回滚点：**
 - Phase 1 回滚：`git checkout HEAD -- gemini_web2api/models.py gemini_web2api/config.py gemini_web2api/gemini.py gemini_web2api/server.py config.example.json .env.example`
 - Phase 2 回滚：`git checkout HEAD -- gemini_web2api/admin.py web-admin/src/App.vue && cd web-admin && npx vite build`
+
+## 2026-07-27 - Task: 部署最新版本到 VPS
+
+### What was done
+
+- 备份服务器原项目到 `/root/gemini-web2api-backups/20260727_234847`，包含项目归档、`config.json` 和原工作树差异补丁。
+- 将 `/opt/gemini-web2api-manage` 更新到 GitHub 提交 `4186a9e`，保留 `.venv`、运行配置和日志目录。
+- 将运行配置的 `default_model` 更新为 `gemini-3.6-flash`，`gemini_bl` 更新为 `boq_assistant-bard-web-server_20260716.08_p0`。
+- 重启并确认 `gemini-web2api.service` 正常运行，Nginx 公网域名为 `geminiapi.274747.xyz`。
+
+### Testing
+
+- systemd 状态：`active (running)`。
+- 本机 `GET /v1/models`、`GET /v1beta/models`：HTTP 200，均包含 `gemini-3.6-flash`。
+- 本机 `/admin`：HTTP 200，管理台静态资源可用。
+- 公网 `https://geminiapi.274747.xyz/`：HTTP 302；`/v1/models` 和 `/v1beta/models`：HTTP 200。
+
+### Notes
+
+**改动文件清单：**
+- `progress.md` — 追加 VPS 备份、部署和验证记录。
+
+**回滚点：**
+- 停止服务后使用 `/root/gemini-web2api-backups/20260727_234847/project.tar.gz` 恢复项目，并用同目录 `config.json` 恢复运行配置；恢复后执行 `systemctl restart gemini-web2api.service`。
