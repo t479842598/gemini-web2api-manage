@@ -420,6 +420,31 @@ python gemini_web2api.py
 
 逆向 Google Gemini 网页端的 StreamGenerate 协议, 将 OpenAI API 格式与 Gemini 内部 protobuf-like 格式互转. 模型选择通过请求 payload 的 `[79]` 字段控制, 映射自 Gemini 前端 JS 源码中的 `MODE_CATEGORY` 枚举.
 
+## 更新日志
+
+### v2.0.0 (2026-07-28)
+
+**项目结构重构**
+- 上游 `Sophomoresty/gemini-web2api` 引入为 git submodule（`_upstream/`），后续只需 `git submodule update --remote` 即可同步
+- 新建 `gemini_web2api_manage/` 扩展包，继承上游 `GeminiHandler` 并注入管理台路由
+- 启动命令从 `python -m gemini_web2api` 改为 `python -m gemini_web2api_manage`
+
+**前端管理台视觉重构**
+- 概览页新增 hero 健康状态卡片（绿/红色渐变边框 + 大图标 + 版本/模型/IP 概要）
+- 概览页新增快捷操作栏（一键直达对话、测试、复制 URL、日志、网络检测）
+- 调用地址列表改为中文标签 + 打开/复制按钮
+- 运行环境改为独立卡片 + 图标 + 彩色状态文字
+- 新增可用模型列表面板（点击跳转到服务测试页）
+
+**前端功能增强**
+- 导航栏服务异常时显示红色 badge
+- 顶栏新增"复制 URL"快捷按钮
+- 对话页支持 localStorage 持久化（刷新不丢失）
+- 对话页新增 System Prompt 输入框
+- 对话页新增导出 Markdown 按钮
+- 日志页新增关键词搜索过滤
+- 网络页连通性面板新增 status tag（连通/不可达 + 延迟 ms）
+
 ## 致谢
 
 - [linux.do](https://linux.do) 社区
