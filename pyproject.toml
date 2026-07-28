@@ -1,7 +1,7 @@
 [project]
-name = "gemini-web2api"
-version = "1.2.0"
-description = "Convert Google Gemini web into OpenAI-compatible API"
+name = "gemini-web2api-manage"
+version = "2.0.0"
+description = "Web management console for gemini-web2api (upstream: Sophomoresty/gemini-web2api)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
@@ -10,11 +10,10 @@ dependencies = [
 ]
 
 [project.scripts]
-gemini-web2api = "gemini_web2api.__main__:main"
+gemini-web2api-manage = "gemini_web2api_manage.__main__:main"
 
 [tool.setuptools.packages.find]
-include = ["gemini_web2api*"]
-exclude = ["api*"]
+include = ["gemini_web2api_manage*"]
 
 [build-system]
 requires = ["setuptools>=68"]

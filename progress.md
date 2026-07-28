@@ -76,3 +76,88 @@
 
 **回滚点：**
 - 停止服务后使用 `/root/gemini-web2api-backups/20260727_234847/project.tar.gz` 恢复项目，并用同目录 `config.json` 恢复运行配置；恢复后执行 `systemctl restart gemini-web2api.service`。
+
+## 2026-07-28 - Task: 重构项目结构 — 上游 submodule + manage 扩展包
+
+### What was done
+
+将上游 Sophomoresty/gemini-web2api 通过 git submodule 引入到 `_upstream/`，当前项目只保留增量价值（管理台扩展）。此前每次上游更新需要手动 diff 合并；重构后只需 `git submodule update --remote`。
+
+- 创建 `gemini_web2api_manage/` 扩展包：`__init__.py`（_upstream path setup）、`config.py`（注入 manage 专用配置键）、`server.py`（继承上游 GeminiHandler 注入 admin 路由）、`__main__.py`（新入口）
+- 将原 `admin.py` + `admin_static/` 从 `gemini_web2api/` 移入 `gemini_web2api_manage/`
+- 备份并清除了 `gemini_web2api/` 中与上游重复的 8 个核心文件
+- 引入上游 submodule 到 `_upstream/`
+- 更新 `api/index.py`（Vercel 入口）、`pyproject.toml`、`manager.pyw` 以使用新入口
+
+### Testing
+
+- `python3 -m compileall gemini_web2api_manage/ api/index.py` — 全部通过
+- 所有 7 个 Python 文件 `py_compile` 通过
+- `.gitmodules` 正确配置；`git submodule status` 确认上游在 `9c3d2fe`
+
+### Notes
+
+**改动文件清单：**
+- `gemini_web2api_manage/__init__.py` — 新建，扩展包入口，设 _upstream 到 sys.path
+- `gemini_web2api_manage/config.py` — 新建，扩展上游配置，加入 manage 专用键
+- `gemini_web2api_manage/server.py` — 新建，继承上游 GeminiHandler，注入 admin 路由
+- `gemini_web2api_manage/__main__.py` — 新建，manage 版入口（python -m gemini_web2api_manage）
+- `gemini_web2api_manage/admin.py` — 从 gemini_web2api/ 移入
+- `gemini_web2api_manage/admin_static/` — 从 gemini_web2api/ 移入
+- `api/index.py` — Vercel 入口改为从 gemini_web2api_manage 导入
+- `pyproject.toml` — 包名改为 gemini-web2api-manage v2.0.0
+- `manager.pyw` — 启动命令改为 -m gemini_web2api_manage
+- `.gitmodules` — 新增上游 submodule 配置
+- `_upstream/` — 新增：Sophomoresty/gemini-web2api git submodule
+- `gemini_web2api/` — 清除了与上游重复的 8 个核心文件 + admin 文件
+
+**回滚点：**
+- `git reset --hard HEAD~1` 回退所有改动
+- 核心模块备份在 `/tmp/gemini_web2api_core_backup_*`
+
+## 2026-07-28 - Task: 前端管理台视觉重构和功能增强
+
+### What was done
+
+对 `web-admin/` 前端管理台进行 4 个 Phase 的改造，改善首屏视觉体验和交互能力。
+
+**Phase 1: 概览页视觉重构**
+- 健康状态 hero 卡片：全宽展示服务状态（绿色/红色渐变边框 + 大图标 + 版本/模型/IP 概要）
+- 快捷操作栏：按钮直达对话、服务测试、复制 Base URL、日志、网络检测
+- 调用地址列表：key 改为中文标签，新增"打开"按钮
+- 运行环境卡片：每个环境项用独立卡片 + 图标 + 彩色状态文字
+- 可用模型列表：点击模型直接跳转到服务测试页
+
+**Phase 2: 导航和交互优化**
+- 导航 badge：服务异常时显示红色圆点
+- 顶栏新增"复制 URL"快捷按钮
+
+**Phase 3: 对话页增强**
+- localStorage 持久化：对话记录刷新不丢失
+- System Prompt 输入框
+- 导出 Markdown 按钮
+- 复制按钮拆分为"复制 JSON"和"导出 MD"
+
+**Phase 4: 其他页面微调**
+- 日志页搜索/过滤
+- 网络页连通性 status tag（连通/不可达 + 延迟 ms）
+
+**构建优化**
+- `web-admin/vite.config.js` 输出路径更新到 `gemini_web2api_manage/admin_static/`
+
+### Testing
+
+- `npm run build` 成功，产物输出到 `gemini_web2api_manage/admin_static/`
+- 所有 Vue 组件模板变更编译通过
+- Python compileall 通过
+
+### Notes
+
+**改动文件清单：**
+- `web-admin/src/App.vue` — 概览页重写 + 导航 badge + 对话增强 + 日志搜索 + 网络指示器
+- `web-admin/src/styles.css` — 新增 hero-card、quick-actions、env-grid、model-grid、nav-badge 样式
+- `web-admin/vite.config.js` — 输出路径更新
+- `gemini_web2api_manage/admin_static/` — 前端重新构建产物
+
+**回滚点：**
+- `cd web-admin && git checkout src/App.vue src/styles.css vite.config.js` 恢复前端源码

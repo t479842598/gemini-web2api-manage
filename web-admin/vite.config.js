@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [vue()],
   base: '/admin/',
   build: {
-    outDir: fileURLToPath(new URL('../gemini_web2api/admin_static', import.meta.url)),
+    outDir: fileURLToPath(new URL('../gemini_web2api_manage/admin_static', import.meta.url)),
     emptyOutDir: true
   },
   server: {

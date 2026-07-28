@@ -1,21 +1,24 @@
-"""Entry point: python -m gemini_web2api"""
+"""Entry point: python -m gemini_web2api_manage"""
 import argparse
 import os
 
-from .config import CONFIG, load_config, find_config
-from .models import MODELS
-from .gemini import HAS_HTTPX
-from .server import GeminiHandler, ThreadedServer
-from . import __version__
+from gemini_web2api_manage import __version__
+from gemini_web2api_manage.config import CONFIG  # noqa: F401 - loads manage defaults
+from gemini_web2api_manage.server import GeminiHandler
+
+from gemini_web2api.models import MODELS
+from gemini_web2api.gemini import HAS_HTTPX
+from gemini_web2api.config import load_config, find_config
+from gemini_web2api.server import ThreadedServer
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Gemini Web to OpenAI API")
+    parser = argparse.ArgumentParser(description="Gemini Web to OpenAI API (Manage Edition)")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--cookie-file", type=str, default=None)
     parser.add_argument("--proxy", type=str, default=None, help="HTTP proxy, e.g. http://127.0.0.1:7890")
-    parser.add_argument("--version", action="version", version=f"gemini-web2api {__version__}")
+    parser.add_argument("--version", action="version", version=f"gemini-web2api-manage {__version__}")
     args = parser.parse_args()
 
     config_path = args.config or os.environ.get("GEMINI_WEB2API_CONFIG") or find_config()
@@ -32,7 +35,7 @@ def main():
 
     port = CONFIG["port"]
     server = ThreadedServer((CONFIG["host"], port), GeminiHandler)
-    print(f"gemini-web2api v{__version__}")
+    print(f"gemini-web2api-manage v{__version__}")
     print(f"  Listening: http://0.0.0.0:{port}")
     print(f"  Base URL:  http://localhost:{port}/v1")
     print(f"  Admin:     http://localhost:{port}/admin")

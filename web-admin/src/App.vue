@@ -23,22 +23,27 @@ import {
 } from 'naive-ui'
 import {
   AnalyticsOutline,
+  AlertCircleOutline,
+  ChatbubbleEllipsesOutline,
+  CheckmarkCircleOutline,
   ClipboardOutline,
+  CodeSlashOutline,
   CopyOutline,
   DocumentTextOutline,
+  EyeOutline,
   FlashOutline,
   GlobeOutline,
+  KeyOutline,
+  LinkOutline,
   LogOutOutline,
-  ChatbubbleEllipsesOutline,
+  OpenOutline,
   PlayOutline,
   RefreshOutline,
   SaveOutline,
   SettingsOutline,
   ShieldCheckmarkOutline,
   TerminalOutline,
-  TrashOutline,
-  EyeOutline,
-  CodeSlashOutline
+  TrashOutline
 } from '@vicons/ionicons5'
 
 const { message } = createDiscreteApi(['message'])
@@ -157,9 +162,31 @@ const chat = reactive({
   model: 'gemini-3.6-flash',
   stream: false,
   input: '',
+  systemPrompt: '',
   messages: [],
   sending: false
 })
+
+const CHAT_STORAGE_KEY = 'gemini_web2api_chat'
+
+function saveChatToStorage() {
+  try {
+    const data = { model: chat.model, stream: chat.stream, systemPrompt: chat.systemPrompt, messages: chat.messages }
+    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(data))
+  } catch (_) {}
+}
+
+function loadChatFromStorage() {
+  try {
+    const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+    if (!raw) return
+    const data = JSON.parse(raw)
+    if (data.messages) chat.messages = data.messages
+    if (data.model) chat.model = data.model
+    if (data.stream !== undefined) chat.stream = data.stream
+    if (data.systemPrompt) chat.systemPrompt = data.systemPrompt
+  } catch (_) {}
+}
 
 const logs = reactive({
   text: '',
@@ -169,6 +196,33 @@ const logs = reactive({
   exists: false,
   candidates: []
 })
+const logFilter = ref('')
+
+const urlLabels = {
+  local: '本地地址',
+  lan: '局域网',
+  current: '当前地址',
+  public: '公网地址',
+  admin: '管理台'
+}
+
+const urlOrder = ['current', 'local', 'lan', 'public', 'admin']
+
+const sortedUrls = computed(() => {
+  const urls = status.urls || {}
+  return urlOrder
+    .filter((k) => urls[k])
+    .map((k) => ({ key: k, label: urlLabels[k] || k, value: urls[k] }))
+})
+
+const envItems = computed(() => [
+  { icon: ShieldCheckmarkOutline, label: 'Cookie', value: cookieState, type: config.cookie_file ? 'success' : 'default' },
+  { icon: GlobeOutline, label: '代理', value: proxyState, type: config.proxy ? 'info' : 'default' },
+  { icon: KeyOutline, label: 'API 密钥', value: apiKeyItems.length ? '已启用' : '未启用', type: apiKeyItems.length ? 'success' : 'warning' },
+  { icon: FlashOutline, label: '流式模式', value: config.force_non_stream ? '强制非流式' : '正常流式', type: config.force_non_stream ? 'warning' : 'success' },
+  { icon: TerminalOutline, label: 'CLI 兼容', value: '/v1beta 已启用', type: 'success' },
+  { icon: SettingsOutline, label: '鉴权模式', value: apiKeyItems.length ? '密钥鉴权' : '无鉴权', type: apiKeyItems.length ? 'info' : 'warning' }
+])
 
 const pageMeta = computed(() => ({
   overview: ['概览', '查看服务状态、调用地址和运行环境'],
@@ -196,6 +250,14 @@ const logMetaText = computed(() => {
   if (!logs.path) return '日志路径：未获取'
   const size = Number.isFinite(logs.size) ? logs.size : 0
   return `日志路径：${logs.path} · ${logs.exists ? `${size} bytes` : '文件不存在'}`
+})
+
+const filteredLogText = computed(() => {
+  if (!logFilter.value.trim()) return logs.text
+  const keyword = logFilter.value.trim().toLowerCase()
+  const lines = logs.text.split('\n')
+  const filtered = lines.filter((line) => line.toLowerCase().includes(keyword))
+  return filtered.join('\n')
 })
 
 function selectedModel(value) {
@@ -533,8 +595,10 @@ async function sendChat() {
   }
   if (chat.sending) return
   const model = selectedModel(chat.model)
-  const messages = [...chat.messages, { role: 'user', content }]
-  chat.messages = messages
+  const apiMessages = []
+  if (chat.systemPrompt.trim()) apiMessages.push({ role: 'system', content: chat.systemPrompt.trim() })
+  apiMessages.push(...chat.messages, { role: 'user', content })
+  chat.messages = [...chat.messages, { role: 'user', content }]
   chat.input = ''
   chat.sending = true
   try {
@@ -542,7 +606,7 @@ async function sendChat() {
     const res = await fetch('/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, messages, stream: streamed })
+      body: JSON.stringify({ model, messages: apiMessages, stream: streamed })
     })
     const text = await res.text()
     if (!res.ok) throw new Error(pretty(text))
@@ -605,6 +669,19 @@ async function copyText(text, label = '已复制') {
   }
 }
 
+function exportChatMarkdown() {
+  const lines = chat.messages.map((m) => {
+    const role = m.role === 'user' ? '**你**' : '**助手**'
+    return `### ${role}\n\n${m.content}`
+  })
+  if (chat.systemPrompt) lines.unshift(`### System\n\n${chat.systemPrompt}`)
+  return lines.join('\n\n---\n\n')
+}
+
+watch(() => chat.messages.length, () => saveChatToStorage())
+watch(() => chat.model, () => saveChatToStorage())
+watch(() => chat.systemPrompt, () => saveChatToStorage())
+
 function openUrl(url) {
   if (url) window.open(url, '_blank', 'noopener,noreferrer')
 }
@@ -615,7 +692,10 @@ watch(active, (value) => {
   if (value === 'logs') readLogs(true)
 })
 
-onMounted(checkAuth)
+onMounted(() => {
+  checkAuth()
+  loadChatFromStorage()
+})
 
 onBeforeUnmount(() => {
   if (logTimer.value) clearInterval(logTimer.value)
@@ -657,6 +737,7 @@ onBeforeUnmount(() => {
             <button v-for="item in navItems" :key="item.key" class="nav-button" :class="{ active: active === item.key }" @click="active = item.key">
               <NIcon size="18" :component="item.icon" />
               <span>{{ item.label }}</span>
+              <span v-if="item.key === 'overview' && !status.ok" class="nav-badge nav-badge-error"></span>
             </button>
           </nav>
         </aside>
@@ -669,6 +750,9 @@ onBeforeUnmount(() => {
             </div>
             <div class="top-actions">
               <NTag :type="healthyType" round>{{ status.ok ? '服务正常' : '服务异常' }}</NTag>
+              <NButton secondary size="small" @click="copyText(status.urls?.current || '', 'Base URL 已复制')">
+                <template #icon><NIcon :component="LinkOutline" /></template>复制 URL
+              </NButton>
               <NButton secondary size="small" :loading="loading" @click="loadStatus(true)">
                 <template #icon><NIcon :component="RefreshOutline" /></template>
               </NButton>
@@ -684,22 +768,43 @@ onBeforeUnmount(() => {
           <NSpin :show="loading && !status.version">
             <!-- ═══ 概览 ═══ -->
             <section v-show="active === 'overview'" class="content-grid">
-              <div class="panel span-4 metric">
-                <div class="metric-label">版本</div>
-                <div class="metric-value">{{ status.version || '-' }}</div>
-                <div class="metric-note">{{ status.admin_static?.ready ? '前端已构建' : '使用缺失提示页' }}</div>
-              </div>
-              <div class="panel span-4 metric">
-                <div class="metric-label">模型</div>
-                <div class="metric-value">{{ status.models.length }}</div>
-                <div class="metric-note">默认：{{ config.default_model || '-' }}</div>
-              </div>
-              <div class="panel span-4 metric">
-                <div class="metric-label">公网 IP</div>
-                <div class="metric-value small-value">{{ network.public_ip || '未获取' }}</div>
-                <div class="metric-note">{{ locationText }}</div>
+              <!-- 健康状态主卡 -->
+              <div class="panel span-12 hero-card" :class="status.ok ? 'hero-ok' : 'hero-error'">
+                <div class="hero-left">
+                  <div class="hero-icon-wrap" :class="status.ok ? 'hero-icon-ok' : 'hero-icon-error'">
+                    <NIcon :component="status.ok ? CheckmarkCircleOutline : AlertCircleOutline" :size="36" />
+                  </div>
+                  <div>
+                    <div class="hero-status">{{ status.ok ? '服务正常运行' : '服务异常' }}</div>
+                    <div class="hero-sub">v{{ status.version || '-' }} · {{ config.default_model || '-' }}</div>
+                  </div>
+                </div>
+                <div class="hero-right">
+                  <div class="hero-stat">
+                    <div class="hero-stat-value">{{ status.models.length }}</div>
+                    <div class="hero-stat-label">模型</div>
+                  </div>
+                  <div class="hero-stat">
+                    <div class="hero-stat-value">{{ network.public_ip || '-' }}</div>
+                    <div class="hero-stat-label">公网 IP</div>
+                  </div>
+                  <div class="hero-stat">
+                    <div class="hero-stat-value">{{ cookieState === '已配置' ? '✓' : '—' }}</div>
+                    <div class="hero-stat-label">Cookie</div>
+                  </div>
+                </div>
               </div>
 
+              <!-- 快捷操作 -->
+              <div class="panel span-12 quick-actions">
+                <NButton type="primary" @click="active = 'chat'"><template #icon><NIcon :component="ChatbubbleEllipsesOutline" /></template>对话</NButton>
+                <NButton secondary @click="active = 'test'"><template #icon><NIcon :component="FlashOutline" /></template>服务测试</NButton>
+                <NButton secondary @click="copyText(status.urls?.current || '', 'Base URL 已复制')"><template #icon><NIcon :component="CopyOutline" /></template>复制 Base URL</NButton>
+                <NButton secondary @click="active = 'logs'"><template #icon><NIcon :component="TerminalOutline" /></template>查看日志</NButton>
+                <NButton secondary @click="active = 'network'"><template #icon><NIcon :component="GlobeOutline" /></template>网络检测</NButton>
+              </div>
+
+              <!-- 调用地址 -->
               <div class="panel span-8">
                 <div class="panel-head">
                   <h2 class="panel-title">调用地址</h2>
@@ -708,28 +813,45 @@ onBeforeUnmount(() => {
                   </NButton>
                 </div>
                 <div class="url-list">
-                  <div v-for="(value, key) in status.urls" :key="key" class="url-row">
-                    <div class="url-label">{{ key }}</div>
-                    <div class="url-value">{{ value || '未配置' }}</div>
-                    <NButton size="small" secondary @click="copyText(value)">
+                  <div v-for="item in sortedUrls" :key="item.key" class="url-row">
+                    <div class="url-label">{{ item.label }}</div>
+                    <div class="url-value">{{ item.value }}</div>
+                    <NButton size="small" secondary @click="openUrl(item.value)">
+                      <template #icon><NIcon :component="OpenOutline" /></template>
+                    </NButton>
+                    <NButton size="small" secondary @click="copyText(item.value)">
                       <template #icon><NIcon :component="CopyOutline" /></template>
                     </NButton>
                   </div>
                 </div>
               </div>
 
+              <!-- 运行环境卡片 -->
               <div class="panel span-4">
                 <h2 class="panel-title">运行环境</h2>
-                <NSpace vertical size="large">
-                  <NStatistic label="Cookie" :value="cookieState" />
-                  <NStatistic label="代理" :value="proxyState" />
-                  <NStatistic label="API 密钥" :value="apiKeysText ? '已启用' : '未启用'" />
-                  <NStatistic label="管理台目录" :value="status.admin_static?.ready ? 'ready' : 'missing'" />
-                  <NStatistic label="Gemini BL" :value="config.gemini_bl || '-'" />
-                  <NStatistic label="流式模式" :value="config.force_non_stream ? '强制非流式' : '正常流式'" />
-                  <NStatistic label="CLI 兼容" :value="'/v1beta 已启用'" />
-                  <NStatistic label="鉴权模式" :value="apiKeyItems.length ? '密钥鉴权' : '无鉴权'" />
-                </NSpace>
+                <div class="env-grid">
+                  <div v-for="item in envItems" :key="item.label" class="env-card">
+                    <NIcon :component="item.icon" :size="18" class="env-icon" />
+                    <div class="env-info">
+                      <div class="env-label">{{ item.label }}</div>
+                      <div class="env-value" :class="`env-${item.type}`">{{ item.value }}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 模型列表 -->
+              <div class="panel span-12">
+                <div class="panel-head">
+                  <h2 class="panel-title">可用模型</h2>
+                  <NTag type="info" round>{{ status.models.length }} 个</NTag>
+                </div>
+                <div class="model-grid">
+                  <div v-for="m in status.models" :key="m.id" class="model-card" @click="test.model = m.id; active = 'test'">
+                    <div class="model-name">{{ m.id }}</div>
+                    <div class="model-desc">{{ m.description }}</div>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -740,7 +862,7 @@ onBeforeUnmount(() => {
                   <h2 class="panel-title">对话</h2>
                   <NSpace align="center" wrap>
                     <NTag type="info" round>{{ chat.stream ? '流式' : '非流式' }}</NTag>
-                    <NButton secondary size="small" @click="chat.messages = []">
+                    <NButton secondary size="small" @click="chat.messages = []; chat.systemPrompt = ''; saveChatToStorage()">
                       <template #icon><NIcon :component="TrashOutline" /></template>清空
                     </NButton>
                   </NSpace>
@@ -763,6 +885,9 @@ onBeforeUnmount(() => {
                 </div>
                 <NForm label-placement="top">
                   <div class="form-grid">
+                    <NFormItem label="System Prompt" class="full">
+                      <NInput v-model:value="chat.systemPrompt" type="textarea" placeholder="可选：系统提示词，会影响模型行为" :autosize="{ minRows: 2, maxRows: 4 }" />
+                    </NFormItem>
                     <NFormItem label="模型">
                       <NSelect v-model:value="chat.model" :options="modelOptions" filterable tag />
                     </NFormItem>
@@ -779,7 +904,10 @@ onBeforeUnmount(() => {
                     <template #icon><NIcon :component="PlayOutline" /></template>发送
                   </NButton>
                   <NButton secondary @click="copyText(JSON.stringify(chat.messages, null, 2), '对话已复制')">
-                    <template #icon><NIcon :component="CopyOutline" /></template>复制对话
+                    <template #icon><NIcon :component="CopyOutline" /></template>复制 JSON
+                  </NButton>
+                  <NButton secondary @click="copyText(exportChatMarkdown(), 'Markdown 已复制')">
+                    <template #icon><NIcon :component="DocumentTextOutline" /></template>导出 MD
                   </NButton>
                 </div>
               </div>
@@ -808,11 +936,23 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <div class="panel span-6">
-                <h2 class="panel-title">Gemini 连通性</h2>
+                <div class="panel-head">
+                  <h2 class="panel-title">Gemini 连通性</h2>
+                  <NTag v-if="network.connectivity?.gemini" :type="network.connectivity.gemini.ok ? 'success' : 'error'" round>
+                    {{ network.connectivity.gemini.ok ? '连通' : '不可达' }}
+                    <template v-if="network.connectivity.gemini.latency_ms"> · {{ network.connectivity.gemini.latency_ms }}ms</template>
+                  </NTag>
+                </div>
                 <pre class="code-box compact-code">{{ pretty(network.connectivity?.gemini || {}) }}</pre>
               </div>
               <div class="panel span-6">
-                <h2 class="panel-title">Google 连通性</h2>
+                <div class="panel-head">
+                  <h2 class="panel-title">Google 连通性</h2>
+                  <NTag v-if="network.connectivity?.google" :type="network.connectivity.google.ok ? 'success' : 'error'" round>
+                    {{ network.connectivity.google.ok ? '连通' : '不可达' }}
+                    <template v-if="network.connectivity.google.latency_ms"> · {{ network.connectivity.google.latency_ms }}ms</template>
+                  </NTag>
+                </div>
                 <pre class="code-box compact-code">{{ pretty(network.connectivity?.google || {}) }}</pre>
               </div>
             </section>
@@ -946,6 +1086,7 @@ onBeforeUnmount(() => {
                 <div class="panel-head">
                   <h2 class="panel-title">运行日志</h2>
                   <NSpace align="center" wrap>
+                    <NInput v-model:value="logFilter" placeholder="搜索日志…" clearable size="small" style="width: 180px" />
                     <NCheckbox v-model:checked="stickToBottom">自动滚动</NCheckbox>
                     <NSwitch v-model:value="autoLogs" />
                     <NButton secondary size="small" @click="readLogs(true)">
@@ -954,13 +1095,13 @@ onBeforeUnmount(() => {
                     <NButton secondary size="small" @click="copyText(logs.text, '日志已复制')">
                       <template #icon><NIcon :component="DocumentTextOutline" /></template>
                     </NButton>
-                    <NButton secondary size="small" @click="logs.text = ''">
+                    <NButton secondary size="small" @click="logs.text = ''; logFilter = ''">
                       <template #icon><NIcon :component="TrashOutline" /></template>
                     </NButton>
                   </NSpace>
                 </div>
-                <div class="log-meta">{{ logMetaText }}</div>
-                <pre v-if="logs.text" ref="logBox" class="code-box log-box">{{ logs.text }}</pre>
+                <div class="log-meta">{{ logMetaText }}{{ logFilter ? ` · 过滤：${logFilter}` : '' }}</div>
+                <pre v-if="logs.text" ref="logBox" class="code-box log-box">{{ filteredLogText }}</pre>
                 <NEmpty v-else description="暂无日志，服务产生输出后会显示在这里。" />
               </div>
             </section>

@@ -394,7 +394,7 @@ class GeminiManager(tk.Tk):
         if SERVER_EXE.exists():
             cmd = [str(SERVER_EXE), "--port", str(port)]
         else:
-            cmd = [get_python_executable(), "-m", "gemini_web2api", "--port", str(port)]
+            cmd = [get_python_executable(), "-m", "gemini_web2api_manage", "--port", str(port)]
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
         env["PYTHONIOENCODING"] = "utf-8"

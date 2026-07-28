@@ -138,6 +138,15 @@ textarea { font: inherit; }
 .nav-button:active { transform: translateY(1px); }
 .nav-button.active { background: var(--accent-soft); color: #0c5132; }
 
+.nav-badge {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.nav-badge-error { background: #d03050; }
+
 .main {
   min-width: 0;
   padding: 24px 30px 30px;
@@ -219,11 +228,61 @@ textarea { font: inherit; }
   overflow-wrap: anywhere;
 }
 
-.url-list { display: grid; gap: 10px; }
+/* ═══ Overview hero card ═══ */
+.hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 28px 32px;
+  transition: box-shadow .2s ease;
+}
+.hero-ok {
+  border-left: 4px solid #18a058;
+  background: linear-gradient(135deg, rgba(24, 160, 88, 0.06) 0%, rgba(255,255,255,0.72) 100%);
+}
+.hero-error {
+  border-left: 4px solid #d03050;
+  background: linear-gradient(135deg, rgba(208, 48, 80, 0.06) 0%, rgba(255,255,255,0.72) 100%);
+}
+.hero-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.hero-icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.hero-icon-ok { background: rgba(24, 160, 88, 0.14); color: #18a058; }
+.hero-icon-error { background: rgba(208, 48, 80, 0.14); color: #d03050; }
+.hero-status { font-size: 20px; font-weight: 800; }
+.hero-sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.hero-right {
+  display: flex;
+  gap: 32px;
+  flex-shrink: 0;
+}
+.hero-stat { text-align: center; }
+.hero-stat-value { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.hero-stat-label { color: var(--muted); font-size: 12px; margin-top: 2px; }
 
+/* ═══ Quick actions ═══ */
+.quick-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+}
+
+/* ═══ URL list ═══ */
 .url-row {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr) auto;
+  grid-template-columns: 92px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   padding: 10px 12px;
@@ -231,7 +290,6 @@ textarea { font: inherit; }
   border-radius: 8px;
   background: #f9fbfd;
 }
-
 .url-label { color: var(--muted); font-weight: 800; }
 .url-value {
   min-width: 0;
@@ -240,6 +298,64 @@ textarea { font: inherit; }
   white-space: nowrap;
   font-family: "Fira Code", Consolas, monospace;
   font-size: 13px;
+}
+
+/* ═══ Environment grid ═══ */
+.env-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+.env-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fbfd;
+  transition: background-color .15s ease;
+}
+.env-card:hover { background: rgba(168, 216, 255, 0.12); }
+.env-icon { color: var(--muted); flex-shrink: 0; }
+.env-info { min-width: 0; }
+.env-label { color: var(--muted); font-size: 12px; font-weight: 700; }
+.env-value { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.env-success { color: #18a058; }
+.env-warning { color: #d48806; }
+.env-info { color: #2080f0; }
+.env-default { color: #334155; }
+
+/* ═══ Model grid ═══ */
+.model-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.model-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f9fbfd;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.model-card:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(24, 160, 88, 0.12);
+}
+.model-name {
+  font-weight: 800;
+  font-size: 14px;
+  margin-bottom: 4px;
+  font-family: "Fira Code", Consolas, monospace;
+}
+.model-desc {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
 }
 
 .form-grid {
@@ -463,6 +579,9 @@ textarea { font: inherit; }
   .network-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chat-section { height: auto; min-height: 0; }
   .chat-list { min-height: 320px; max-height: 60vh; }
+  .hero-card { flex-direction: column; align-items: flex-start; }
+  .hero-right { width: 100%; justify-content: space-around; }
+  .model-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -471,11 +590,15 @@ textarea { font: inherit; }
   .form-grid { grid-template-columns: 1fr; }
   .url-row { grid-template-columns: 1fr; }
   .page-title { font-size: 20px; }
-  .metric-value { font-size: 22px; }
   .panel { padding: 16px; }
   .inline-editor { grid-template-columns: 1fr; }
   .secret-table th:last-child,
   .secret-table td:last-child { width: auto; }
   .network-grid { grid-template-columns: 1fr; }
   .login-card { padding: 24px; }
+  .hero-card { padding: 20px; }
+  .hero-right { gap: 20px; }
+  .hero-stat-value { font-size: 16px; }
+  .quick-actions { gap: 8px; }
+  .model-grid { grid-template-columns: 1fr; }
 }
