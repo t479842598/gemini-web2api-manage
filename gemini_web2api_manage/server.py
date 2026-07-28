@@ -31,6 +31,17 @@ from gemini_web2api.models import MODELS, resolve_model
 class GeminiHandler(UpstreamGeminiHandler):
     """Extends the upstream handler with admin console routes."""
 
+    def send_html(self, html: str, status=200):
+        self.send_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status)
+
+    def send_bytes(self, body: bytes, content_type: str, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def _empty_response_fallback(self) -> str:
         return CONFIG.get("empty_response_fallback") or (
             "Gemini 返回了空内容。可能原因：Cookie 失效、内容被安全策略拦截、"
