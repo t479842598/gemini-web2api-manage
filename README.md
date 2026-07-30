@@ -14,7 +14,7 @@
 
 - **可选密钥**: `api_keys` 为空时免密, 填入密钥后按 OpenAI Bearer Key 校验
 - **OpenAI 兼容**: 直接替换 `/v1/chat/completions` 和 `/v1/models`
-- **工具调用**: 完整的 Function Calling 支持 (OpenAI 格式)
+- **工具调用**: 完整的 Function Calling 支持 (OpenAI 格式)，`tool_choice=auto` 时自动引导模型优先调用工具
 - **多模型**: Flash, Flash Thinking (2万字+输出), Pro, Auto, Lite
 - **思考深度**: 通过 `@think=N` 后缀调节 (0=最深, 4=最浅)
 - **联网搜索**: 内置互联网访问 (Gemini 原生搜索能力)
@@ -39,7 +39,7 @@ pip install httpx
 cp .env.example .env
 
 # 3. 启动服务
-python -m gemini_web2api
+python -m gemini_web2api_manage
 ```
 
 服务启动在 `http://localhost:8081/v1`. Web 管理台地址是 `http://localhost:8081/admin`.
@@ -421,6 +421,13 @@ python gemini_web2api.py
 逆向 Google Gemini 网页端的 StreamGenerate 协议, 将 OpenAI API 格式与 Gemini 内部 protobuf-like 格式互转. 模型选择通过请求 payload 的 `[79]` 字段控制, 映射自 Gemini 前端 JS 源码中的 `MODE_CATEGORY` 枚举.
 
 ## 更新日志
+
+### v2.0.1 (2026-07-30)
+
+**修复工具调用与请求分发**
+- 修复 manage 层 `do_POST` 提前消费请求 body 导致所有 API 请求（`/v1/chat/completions`、`/v1/responses`、Google `:generateContent`）返回 400 "invalid JSON" 的严重 bug。manage 层现在仅对 admin 路由读取 body，其余路径直接转交 upstream 处理
+- 增强 `tool_choice=auto` 工具调用引导：Gemini Web 逆向接口靠 prompt 注入模拟工具调用，auto 模式下模型常选择直接编答案而非触发 tool_call。现对 auto 模式追加软引导提示，推动模型在请求匹配工具能力时优先调用工具，同时保留模型裁量权
+- 修正 README 启动命令为 `python -m gemini_web2api_manage`
 
 ### v2.0.0 (2026-07-28)
 

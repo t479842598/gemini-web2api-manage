@@ -121,29 +121,30 @@ class GeminiHandler(UpstreamGeminiHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length) if length else b""
+            # Only read the body for admin routes. For all other paths we must
+            # leave the stream untouched so the upstream handler can read it
+            # itself — reading here would consume the body and make upstream
+            # see an empty payload (400 "invalid JSON").
+            if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/config"):
+                length = int(self.headers.get("Content-Length", 0))
+                body = self.rfile.read(length) if length else b""
 
-            # Admin login/logout/config
-            if path == "/admin/api/login":
-                self._handle_admin_login(body)
-                return
-            if path == "/admin/api/logout":
-                self.send_json(
-                    {"ok": True},
-                    headers={"Set-Cookie": clear_admin_cookie()},
-                )
-                return
-            if (
-                path == "/admin/api/config"
-                and not self._require_admin()
-            ):
-                return
-            if path == "/admin/api/config":
+                if path == "/admin/api/login":
+                    self._handle_admin_login(body)
+                    return
+                if path == "/admin/api/logout":
+                    self.send_json(
+                        {"ok": True},
+                        headers={"Set-Cookie": clear_admin_cookie()},
+                    )
+                    return
+                # /admin/api/config
+                if not self._require_admin():
+                    return
                 self._handle_admin_config(body)
                 return
 
-            # Fall through to upstream handler
+            # Fall through to upstream handler (body not yet consumed)
             super().do_POST()
 
         except (BrokenPipeError, ConnectionResetError):

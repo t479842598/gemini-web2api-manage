@@ -161,3 +161,42 @@
 
 **回滚点：**
 - `cd web-admin && git checkout src/App.vue src/styles.css vite.config.js` 恢复前端源码
+
+## 2026-07-30 - Task: 修复工具调用失败与回答不一致问题
+
+### What was done
+
+**根因定位：manage 层 do_POST 提前消费请求 body**
+- `gemini_web2api_manage/server.py` 的 `do_POST` 在分发前无条件读取了整个请求 body，随后 `super().do_POST()` 转交 upstream 处理时，upstream 再次读取 body 已读到空字节，导致 `_parse_body(b"")` 返回 None，所有 `/v1/chat/completions`、`/v1/responses`、Google `:generateContent` 请求一律返回 400 "invalid JSON"。
+- 这意味着工具调用请求根本到不了 Gemini 上游，是"工具调用总是出问题"的直接原因。
+
+**增强 tool_choice=auto 提示词引导**
+- Gemini Web 是逆向接口，工具调用靠 prompt 注入模拟。upstream 在 auto 模式下只告知模型"可以调用工具"，模型常选择直接编答案而不触发 tool_call。
+- 因 `_upstream` 是 git submodule（不可直接修改），在 manage 层 `__init__.py` 对 upstream 的 `messages_to_prompt` 和 `google_contents_to_prompt` 做包装：当 tool_choice=auto（Google AUTO）且有 tools 时，追加软引导提示，推动模型在请求匹配工具能力时优先调用工具，同时保留模型裁量权（非强制）。
+
+### Testing
+
+本地启动服务（`/usr/bin/python3 -m gemini_web2api_manage --port 8081`，httpx 0.28.1，HAS_HTTPX=True）后运行三组测试：
+
+1. **基础 chat**：`POST /v1/chat/completions` 返回 200，Gemini 正常回复 —— 修复前全部 400。
+2. **工具调用三场景**（`_tool_test.py`）：
+   - 无工具：200，正常文本回答 ✓
+   - auto + 工具：200，正确触发 `tool_calls`（`get_weather(Beijing)`）✓ —— 修复前模型直接编天气数据不调工具
+   - required + 工具：200，正确触发 `tool_calls`（`get_weather(Shanghai)`）✓
+3. **一致性四场景**（`_consistency_test.py`）：
+   - 多轮上下文：正确记住"小明、25岁" ✓
+   - 工具结果后续：正确使用 tool 返回数据生成回答 ✓
+   - system prompt：正确遵守法语回答指令 ✓
+   - auto + 明确要求调工具：正确触发 `tool_calls`（`get_weather(深圳)`）✓
+4. **日志确认**：所有 POST 请求状态码从 400 变为 200。
+5. **语法验证**：`py_compile` 两个修改文件通过。
+
+### Notes
+
+**改动文件清单：**
+- `gemini_web2api_manage/server.py` — `do_POST` 改为仅对 admin 路由（login/logout/config）读取 body，其余路径直接 fall through 给 upstream，避免 body 被提前消费导致 400
+- `gemini_web2api_manage/__init__.py` — 新增 `_patch_auto_tool_prompt()`，包装 upstream 的 `messages_to_prompt` 和 `google_contents_to_prompt`，为 tool_choice=auto/AUTO 追加软引导提示
+
+**回滚方式：**
+- `git checkout gemini_web2api_manage/server.py gemini_web2api_manage/__init__.py`
+- 回滚后所有 POST 请求会恢复 400，工具调用不可用
