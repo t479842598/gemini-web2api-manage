@@ -1,5 +1,23 @@
 # 更新日志
 
+## v2.1.0 (2026-08-09)
+
+### Bug 修复
+
+- **修复管理台登录 500**：`send_json` 不支持 `headers` 参数导致登录/登出接口抛 `TypeError`（返回 500 且无法设置 Cookie），现已在 `GeminiHandler` 中覆盖 `send_json` 支持可选 `headers`
+
+### 上游同步（f92a31c）
+
+- **gemini_bl 自动更新**：启动时自动抓取最新 BL，请求遇 405 时自动更新并重试（流式回退非流式），无需再手动改配置
+- **`temporary_chats` 配置项**：控制临时对话标志，管理台新增开关
+- **Chat 流式兼容**：首 chunk 补 `role:"assistant"`，适配严格 OpenAI SDK
+- **Responses API 流式**：补全完整事件序列（created/in_progress/output_item/content_part/delta/done/completed），修复 Codex CLI 兼容
+
+### 前端
+
+- **默认暗色主题**：进入管理台默认暗色，顶栏可切换 暗色（默认）/ 跟随系统 / 亮色，选择持久化
+- **主题防闪**：首帧前应用主题，避免亮色闪烁
+
 ## v2.0.0 (2026-07-28)
 
 ### 项目结构重构

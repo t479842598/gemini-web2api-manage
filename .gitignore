@@ -21,3 +21,5 @@ gemini-web2api-oran.zip
 build/
 dist/
 *.egg-info/
+gemini-auth.json
+_deploy_check.py

@@ -16,5 +16,6 @@
   "cookie_file": null,
   "proxy": null,
   "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
-  "log_requests": true
+  "log_requests": true,
+  "temporary_chats": false
 }

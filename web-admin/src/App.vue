@@ -19,7 +19,11 @@ import {
   NSwitch,
   NTag,
   NPopconfirm,
-  createDiscreteApi
+  NPopover,
+  NDropdown,
+  createDiscreteApi,
+  darkTheme,
+  lightTheme
 } from 'naive-ui'
 import {
   AnalyticsOutline,
@@ -36,17 +40,55 @@ import {
   KeyOutline,
   LinkOutline,
   LogOutOutline,
+  MoonOutline,
   OpenOutline,
   PlayOutline,
   RefreshOutline,
   SaveOutline,
   SettingsOutline,
   ShieldCheckmarkOutline,
+  SunnyOutline,
   TerminalOutline,
   TrashOutline
 } from '@vicons/ionicons5'
 
 const { message } = createDiscreteApi(['message'])
+
+// ─── Theme management: dark by default, auto follows system, manual override ─
+const THEME_KEY = 'gw_admin_theme'
+const theme = ref('dark')
+const isDark = computed(() => {
+  if (theme.value === 'dark') return true
+  if (theme.value === 'light') return false
+  return window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)').matches : true
+})
+
+function applyTheme() {
+  const dark = isDark.value
+  document.documentElement.classList.toggle('dark', dark)
+  try {
+    localStorage.setItem(THEME_KEY, theme.value)
+  } catch (_) {}
+}
+
+function setTheme(value) {
+  theme.value = value
+  applyTheme()
+}
+
+const themeOptions = [
+  { label: '暗色（默认）', value: 'dark' },
+  { label: '跟随系统', value: 'auto' },
+  { label: '亮色', value: 'light' }
+]
+
+function loadTheme() {
+  try {
+    const stored = localStorage.getItem(THEME_KEY)
+    if (stored === 'dark' || stored === 'light' || stored === 'auto') theme.value = stored
+  } catch (_) {}
+  applyTheme()
+}
 
 const themeOverrides = {
   common: {
@@ -133,6 +175,7 @@ const config = reactive({
   empty_response_fallback: '',
   api_keys: [],
   force_non_stream: false,
+  temporary_chats: false,
   admin_password: '',
   gemini_bl: ''
 })
@@ -693,6 +736,12 @@ watch(active, (value) => {
 })
 
 onMounted(() => {
+  loadTheme()
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (theme.value === 'auto') applyTheme()
+    })
+  }
   checkAuth()
   loadChatFromStorage()
 })
@@ -703,7 +752,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <NConfigProvider :theme-overrides="themeOverrides">
+  <NConfigProvider :theme="isDark ? darkTheme : lightTheme" :theme-overrides="themeOverrides">
     <NMessageProvider>
       <div v-if="!auth.checked" class="login-screen">
         <NSpin size="large" />
@@ -749,6 +798,11 @@ onBeforeUnmount(() => {
               <div class="page-desc">{{ pageMeta[1] }}</div>
             </div>
             <div class="top-actions">
+              <NDropdown trigger="click" :options="themeOptions" @select="setTheme">
+                <NButton tertiary size="small">
+                  <template #icon><NIcon :component="isDark ? MoonOutline : SunnyOutline" /></template>{{ isDark ? '暗色' : '亮色' }}
+                </NButton>
+              </NDropdown>
               <NTag :type="healthyType" round>{{ status.ok ? '服务正常' : '服务异常' }}</NTag>
               <NButton secondary size="small" @click="copyText(status.urls?.current || '', 'Base URL 已复制')">
                 <template #icon><NIcon :component="LinkOutline" /></template>复制 URL
@@ -1064,6 +1118,7 @@ onBeforeUnmount(() => {
                     <NFormItem label="XSRF Token"><NInput v-model:value="config.xsrf_token" type="password" show-password-on="click" placeholder="可选：Gemini 请求参数 at" /></NFormItem>
                     <NFormItem label="Gemini BL"><NInput v-model:value="config.gemini_bl" placeholder="boq_assistant-bard-web-server_YYYYMMDD.00_p0" /></NFormItem>
                     <NFormItem label="强制非流式"><NSwitch v-model:value="config.force_non_stream" /></NFormItem>
+                    <NFormItem label="临时对话"><NSwitch v-model:value="config.temporary_chats" /></NFormItem>
                     <NFormItem label="默认模型"><NSelect v-model:value="config.default_model" :options="modelOptions" filterable tag /></NFormItem>
                     <NFormItem label="公网 Base URL"><NInput v-model:value="config.public_base_url" placeholder="例如 https://your-project.vercel.app/v1" /></NFormItem>
                     <NFormItem label="空响应兜底文案"><NInput v-model:value="config.empty_response_fallback" type="textarea" :autosize="{ minRows: 2, maxRows: 4 }" /></NFormItem>

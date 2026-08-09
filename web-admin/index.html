@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="GeminiWeb2API local admin console" />
     <title>GeminiWeb2API Admin</title>
+    <script>
+      // Apply theme before first paint to avoid flash of light mode.
+      // Default: dark. Users can switch to 'auto' (follow system) or 'light'.
+      (function () {
+        try {
+          var stored = localStorage.getItem('gw_admin_theme')
+          var dark
+          if (stored === 'dark') dark = true
+          else if (stored === 'light') dark = false
+          else if (stored === 'auto') dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+          else dark = true // default dark
+          if (dark) document.documentElement.classList.add('dark')
+        } catch (e) { document.documentElement.classList.add('dark') }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

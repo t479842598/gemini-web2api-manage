@@ -31,6 +31,18 @@ from gemini_web2api.models import MODELS, resolve_model
 class GeminiHandler(UpstreamGeminiHandler):
     """Extends the upstream handler with admin console routes."""
 
+    def send_json(self, data, status=200, headers=None):
+        """Send JSON response; optional extra response headers (e.g. Set-Cookie)."""
+        body = json.dumps(data, ensure_ascii=False).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        for key, value in (headers or {}).items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def send_html(self, html: str, status=200):
         self.send_bytes(html.encode("utf-8"), "text/html; charset=utf-8", status)
 

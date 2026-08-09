@@ -7,7 +7,7 @@ from gemini_web2api_manage.config import CONFIG  # noqa: F401 - loads manage def
 from gemini_web2api_manage.server import GeminiHandler
 
 from gemini_web2api.models import MODELS
-from gemini_web2api.gemini import HAS_HTTPX
+from gemini_web2api.gemini import HAS_HTTPX, fetch_latest_bl
 from gemini_web2api.config import load_config, find_config
 from gemini_web2api.server import ThreadedServer
 
@@ -32,6 +32,10 @@ def main():
         CONFIG["cookie_files"] = [args.cookie_file]
     if args.proxy:
         CONFIG["proxy"] = args.proxy
+
+    new_bl = fetch_latest_bl()
+    if new_bl:
+        CONFIG["gemini_bl"] = new_bl
 
     port = CONFIG["port"]
     server = ThreadedServer((CONFIG["host"], port), GeminiHandler)
