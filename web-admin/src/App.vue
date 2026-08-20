@@ -423,6 +423,7 @@ function addCookie() {
     cookieItems.value.push(row)
   }
   cookieDraft.value = ''
+  message.info('Cookie 已暂存，点击「保存配置」后生效')
 }
 
 function editCookie(index) {
@@ -521,13 +522,12 @@ async function saveConfig() {
   saving.value = true
   try {
     syncApiKeysText()
-    const existingPaths = cookieItems.value.filter((item) => !item.content && item.path).map((item) => item.path)
-    const newContents = cookieItems.value.filter((item) => item.content).map((item) => item.content)
+    // cookie_items 全量快照协议：有 content 的项写入磁盘（复用已有路径或新建），
+    // 仅 path 的项保留原文件，不在列表中的项视为删除。
     const payload = {
       ...config,
       api_keys: [...apiKeyItems.value],
-      cookie_files: existingPaths.length > 0 ? existingPaths : undefined,
-      cookie_contents: newContents.length > 0 ? newContents : undefined,
+      cookie_items: cookieItems.value.map((item) => ({ path: item.path || null, content: item.content || null })),
       cookie_content: ''
     }
     const data = await api('/admin/api/config', {
@@ -546,7 +546,8 @@ async function saveConfig() {
       label: `Cookie ${index + 1}`
     }))
     await loadStatus()
-    message.success('配置已保存')
+    const cookieFiles = (data.config?.cookie_source?.files || []).filter((f) => f.exists)
+    message.success(cookieFiles.length ? `配置已保存（${cookieFiles.length} 个 Cookie 已落盘）` : '配置已保存')
   } catch (err) {
     message.error(`保存失败：${err.message}`)
   } finally {
@@ -1112,7 +1113,7 @@ onBeforeUnmount(() => {
                       </div>
                     </NFormItem>
                     <NFormItem label="新管理员密码"><NInput v-model:value="config.admin_password" type="password" show-password-on="click" placeholder="留空表示不修改; 默认 sk-admin" /></NFormItem>
-                    <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890" /></NFormItem>
+                    <NFormItem label="代理"><NInput v-model:value="config.proxy" placeholder="例如 http://127.0.0.1:7890 或 socks5://user:pass@host:port" /></NFormItem>
                     <NFormItem label="Gemini Base URL"><NInput v-model:value="config.gemini_base_url" placeholder="留空默认 https://gemini.google.com" /></NFormItem>
                     <NFormItem label="Google 账号序号"><NInputNumber v-model:value="config.auth_user" clearable placeholder="默认账号留空；第二账号填 1" /></NFormItem>
                     <NFormItem label="XSRF Token"><NInput v-model:value="config.xsrf_token" type="password" show-password-on="click" placeholder="可选：Gemini 请求参数 at" /></NFormItem>

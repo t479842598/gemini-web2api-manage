@@ -170,7 +170,7 @@ def admin_config_payload(config: dict) -> dict:
         "cookie_content": contents[0] if contents else "",
         "cookie_contents": contents,
         "cookie_source": cookie_status(config),
-        "proxy": config.get("proxy") or "",
+        "proxy": config.get("_proxy_original") or config.get("proxy") or "",
         "gemini_base_url": config.get("gemini_base_url") or "",
         "auth_user": config.get("auth_user"),
         "xsrf_token": config.get("xsrf_token") or "",
@@ -237,21 +237,50 @@ def network_diagnostics(config: dict) -> dict:
 
 
 def app_dir() -> Path:
+    """Legacy app dir based on cwd — used only as a read fallback for old
+    deployments that wrote config.json next to the working directory."""
     return Path.cwd()
 
 
-def writable_app_dir() -> Path:
-    root = app_dir()
+def data_dir() -> Path:
+    """Stable data directory for config & cookie files, independent of cwd.
+
+    Resolution order:
+      1. $GEMINI_WEB2API_DATA_DIR (explicit override, recommended for systemd)
+      2. Project root (parent of this package); frozen build: exe directory
+      3. TMPDIR fallback (last resort)
+    """
+    env_dir = os.environ.get("GEMINI_WEB2API_DATA_DIR")
+    if env_dir:
+        env_path = Path(env_dir).expanduser()
+        try:
+            env_path.mkdir(parents=True, exist_ok=True)
+            return env_path
+        except OSError:
+            pass
+    if getattr(sys, "frozen", False):
+        frozen_root = Path(sys.executable).resolve().parent
+        try:
+            frozen_root.mkdir(parents=True, exist_ok=True)
+            return frozen_root
+        except OSError:
+            pass
+    project_root = Path(__file__).resolve().parent.parent
     try:
-        root.mkdir(parents=True, exist_ok=True)
-        probe = root / ".gemini_web2api_write_test"
+        project_root.mkdir(parents=True, exist_ok=True)
+        probe = project_root / ".gemini_web2api_write_test"
         probe.write_text("ok", encoding="utf-8")
         probe.unlink(missing_ok=True)
-        return root
+        return project_root
     except OSError:
-        fallback = Path(os.environ.get("TMPDIR") or "/tmp") / "gemini-web2api"
-        fallback.mkdir(parents=True, exist_ok=True)
-        return fallback
+        pass
+    fallback = Path(os.environ.get("TMPDIR") or "/tmp") / "gemini-web2api"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
+def writable_app_dir() -> Path:
+    return data_dir()
 
 
 def config_path() -> Path:
@@ -259,7 +288,7 @@ def config_path() -> Path:
 
 
 def writable_config_path() -> Path:
-    return writable_app_dir() / "config.json"
+    return data_dir() / "config.json"
 
 
 def log_path() -> Path:
@@ -315,6 +344,7 @@ def get_lan_ip() -> str:
 
 def read_config(default_config: dict) -> dict:
     data = dict(default_config)
+    # Legacy cwd config first, stable data_dir config last (wins).
     paths = [config_path(), writable_config_path()]
     seen = set()
     for path in paths:
@@ -332,7 +362,13 @@ def read_config(default_config: dict) -> dict:
 
 
 def cookie_content_path() -> Path:
-    return writable_app_dir() / "cookie.txt"
+    return data_dir() / "cookie.txt"
+
+
+def cookies_dir() -> Path:
+    path = data_dir() / "cookies"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def cookie_status(config: dict) -> dict:
@@ -371,22 +407,80 @@ def write_cookie_content(config: dict, content: str) -> str:
     return str(target)
 
 
+def _next_cookie_index(root: Path) -> int:
+    used = set()
+    for p in root.glob("cookie_*.txt"):
+        try:
+            used.add(int(p.stem.split("_")[1]))
+        except (IndexError, ValueError):
+            continue
+    return (max(used) + 1) if used else 1
+
+
 def write_cookie_contents(contents: list) -> list:
+    """Legacy protocol: append each content as a new cookie_N.txt file."""
     paths = []
-    root = writable_app_dir()
-    for index, content in enumerate(contents, start=1):
+    root = cookies_dir()
+    index = _next_cookie_index(root)
+    for content in contents:
         value = str(content or "").strip()
         if not value:
             continue
         target = root / f"cookie_{index}.txt"
         target.write_text(value + "\n", encoding="utf-8")
         paths.append(str(target))
+        index += 1
     return paths
+
+
+def apply_cookie_items(data: dict, items: list) -> list:
+    """Apply the frontend's full cookie snapshot (cookie_items protocol).
+
+    Each item is {path?, content?}:
+      - content non-empty  -> write to disk (reuse path if it was an existing
+                              cookie file, otherwise allocate a new cookie_N.txt)
+      - content empty + path -> keep the existing file
+      - absent              -> removed (file stays on disk but is unreferenced)
+    Returns the final ordered cookie_files list.
+    """
+    root = cookies_dir()
+    old_files = set(data.get("cookie_files") or [])
+    final_files = []
+    seen = set()
+    index = _next_cookie_index(root)
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        path = str(raw.get("path") or "").strip()
+        content = str(raw.get("content") or "").strip()
+        if content:
+            if path and path in old_files and path not in seen:
+                target = Path(path)
+            else:
+                while Path(root / f"cookie_{index}.txt").exists():
+                    index += 1
+                target = root / f"cookie_{index}.txt"
+                index += 1
+            try:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content + "\n", encoding="utf-8")
+            except OSError:
+                continue
+            key = str(target)
+        elif path and path not in seen:
+            key = path
+        else:
+            continue
+        if key not in seen:
+            final_files.append(key)
+            seen.add(key)
+    return final_files
 
 
 def save_config(current_config: dict, updates: dict) -> dict:
     allowed = {
         "cookie_file",
+        "cookie_items",
         "proxy",
         "default_model",
         "public_base_url",
@@ -405,11 +499,28 @@ def save_config(current_config: dict, updates: dict) -> dict:
     }
     data = read_config(current_config)
 
+    # ── Cookie snapshot protocol (frontend sends the full cookie_items list) ──
+    cookie_items = updates.get("cookie_items")
+    if isinstance(cookie_items, list):
+        final_files = apply_cookie_items(data, cookie_items)
+        data["cookie_files"] = final_files
+        data["cookie_file"] = final_files[0] if final_files else None
+        current_config["cookie_files"] = list(final_files)
+        current_config["cookie_file"] = data["cookie_file"]
+        skip_cookie = {
+            "cookie_items", "cookie_file", "cookie_files",
+            "cookie_content", "cookie_contents",
+        }
+    else:
+        skip_cookie = set()
+
     # Phase 1: process non-cookie-files keys first
     for key in allowed:
         if key not in updates:
             continue
         value = updates[key]
+        if key in skip_cookie:
+            continue
         if key == "api_keys":
             if isinstance(value, str):
                 parts = value.replace(",", "\n").splitlines()
@@ -447,8 +558,9 @@ def save_config(current_config: dict, updates: dict) -> dict:
             continue
         data[key] = value if value not in ("", None) else None
 
-    # Phase 2: process cookie_files (preserving any new paths from cookie_contents)
-    if "cookie_files" in updates:
+    # Phase 2: legacy cookie_files protocol (frontend passes the final list of
+    # path-only items to keep; new content goes through cookie_contents)
+    if not skip_cookie and "cookie_files" in updates:
         value = updates["cookie_files"]
         if isinstance(value, str):
             items = value.replace(",", "\n").splitlines()
@@ -463,7 +575,20 @@ def save_config(current_config: dict, updates: dict) -> dict:
             data["cookie_files"] = combined
             data["cookie_file"] = combined[0]
 
-    writable_config_path().write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_path = writable_config_path()
+    try:
+        write_path.parent.mkdir(parents=True, exist_ok=True)
+        if write_path.exists():
+            try:
+                backup = write_path.with_suffix(write_path.suffix + ".bak")
+                backup.write_text(write_path.read_text(encoding="utf-8"), encoding="utf-8")
+            except OSError:
+                pass
+        write_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+    except OSError:
+        raise
     current_config.update(data)
     return data
 
