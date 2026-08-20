@@ -122,12 +122,16 @@ class GeminiHandler(UpstreamGeminiHandler):
                 self._handle_admin_stats(parsed.query)
                 return
             if path.startswith("/admin/"):
+                if path.startswith("/admin/api/"):
+                    self.send_json({"error": "admin api not found"}, 404)
+                    return
                 asset = read_admin_asset(path)
                 if asset:
                     body, content_type = asset
                     self.send_bytes(body, content_type)
                 else:
-                    self.send_json({"error": "admin asset not found"}, 404)
+                    # SPA fallback: client-side routes (/admin/login, /admin/dashboard ...)
+                    self.send_html(read_admin_index())
                 return
             if path == "/":
                 self.send_response(302)

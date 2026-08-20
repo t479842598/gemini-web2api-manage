@@ -1,5 +1,14 @@
 # 更新日志
 
+## v3.0.0 (2026-08-20)
+
+### 前端迁移
+
+- **前端技术栈迁移到 React 19 + TypeScript + Vite + Tailwind 4 + shadcn**：与 freebuff2api 完全一致，样式逐页对齐（porcelain-moss / tungsten-dark 亮暗主题 + 跟随系统）
+- 页面全部重写：登录 / 概览（含请求统计卡片、模型用量、Key 用量）/ 对话（含导出 MD/JSON、localStorage 持久化）/ 网络检测 / 服务测试 / 配置（Cookie + API Key 管理）/ 运行日志
+- 后端新增 SPA fallback：`/admin/*` 非 API 路径返回 index.html，支持客户端路由
+- 删除 Vue 遗留代码（naive-ui 单文件架构）
+
 ## v2.2.0 (2026-08-20)
 
 ### 功能
