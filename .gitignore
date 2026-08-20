@@ -12,6 +12,8 @@ node_modules/
 web-admin/node_modules/
 web-admin/.vite/
 logs/*.log
+.lrnev/
+AGENTS.md
 .lrnev/agents/
 .lrnev/locks/
 .lrnev/runtime/

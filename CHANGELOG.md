@@ -1,5 +1,16 @@
 # 更新日志
 
+## v2.1.1 (2026-08-16)
+
+### 上游同步（upstream/main 2bb988b）
+
+- **新增 `gemini-3.7-flash` 模型**：上游新增最新模型并调整 3.6 描述
+- **OpenAI 多模态输入支持**：`image_url` / base64 / data URL 图片输入 + SSRF 防护 + MIME 自动识别（`detect_image_mime`）
+- **chunked request body 支持**：兼容 `Transfer-Encoding: chunked` 的客户端请求
+- **模块化包流式同步**：上游官方将 streaming 修复（role:assistant 首 chunk、Responses 完整事件序列）同步到模块化目录，与本地 fork 已移植功能对齐
+- **BL 自动更新保留**：合并后保留 fork 独有的 `gemini_bl` 自动更新 + 405 重试
+- 上游模块化同步测试（`tests/test_modular_sync.py`，18 项）全部通过
+
 ## v2.1.0 (2026-08-09)
 
 ### Bug 修复
