@@ -32,8 +32,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" \
-            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.tar.gz" \
-            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.sha256" \
-            --title "Gemini Web2API Manage ${GITHUB_REF_NAME}" \
-            --generate-notes
+          ASSETS=(
+            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.tar.gz"
+            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.sha256"
+          )
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${ASSETS[@]}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${ASSETS[@]}" \
+              --title "Gemini Web2API Manage ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi
