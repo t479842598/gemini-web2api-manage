@@ -23,5 +23,8 @@ cp -R docs "$ARTIFACT/"
 chmod +x "$ARTIFACT/gemini-web2api-manage"
 
 tar -C "$ROOT/release" -czf "$ARTIFACT.tar.gz" "$(basename "$ARTIFACT")"
-sha256sum "$ARTIFACT/gemini-web2api-manage" "$ARTIFACT.tar.gz" | tee "$ARTIFACT.sha256"
+(
+  cd "$ROOT/release"
+  sha256sum "$(basename "$ARTIFACT.tar.gz")"
+) | tee "$ARTIFACT.sha256"
 printf 'Built %s\n' "$ARTIFACT.tar.gz"
