@@ -3,7 +3,7 @@ import argparse
 import os
 
 from gemini_web2api_manage import __version__
-from gemini_web2api_manage.config import CONFIG  # noqa: F401 - loads manage defaults
+from gemini_web2api_manage.config import CONFIG, apply_env_config  # loads manage defaults and env overrides
 from gemini_web2api_manage.server import GeminiHandler
 from gemini_web2api_manage.admin import config_path as legacy_config_path, writable_config_path
 from gemini_web2api_manage import xsrf  # noqa: F401 - installs automatic at-token retry
@@ -49,6 +49,7 @@ def main():
     config_path = resolve_config_path(args.config)
     if config_path:
         load_config(config_path)
+    apply_env_config()
 
     if args.port:
         CONFIG["port"] = args.port

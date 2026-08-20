@@ -9,6 +9,15 @@
 - **Agent 工具循环**：对话页 Agent 开关，自动执行工具调用循环（get_weather / calc / get_time / read_file），支持多轮直至完成
 - **图片上传/粘贴**：输入框支持粘贴或选择图片，以 OpenAI image_url 格式发送
 
+### 发布与部署
+
+- 统一 Python 包、前端包和 npm lockfile 版本为 `3.1.0`。
+- 重写中英文 README，补充架构、技术栈、管理 API、systemd、Nginx、Docker、Compose 和 Vercel 部署说明。
+- 增加生产管理台登录页与概览页截图，记录真实服务器验证结果。
+- 新增 Linux x86_64 PyInstaller 二进制构建流程、systemd 服务文件、SHA-256 校验文件和 GitHub Actions tag 发布流程；正式生产发布以二进制 + systemd 为主。
+- 修正可选源码 Docker 入口使用管理版服务，并通过 `/data` 数据卷持久化配置、Cookie、统计和上传文件。
+- 补齐 Vercel 环境变量适配，包括 `GEMINI_COOKIE`、`API_KEYS`、`PROXY`、`ADMIN_PASSWORD` 和运行参数。
+
 ### 已知限制
 
 - 图片识别：Gemini 返回 `BardErrorInfo [1003]`（上游 file binding 仍为 WIP），图片发送链路已通但模型暂无法识别图片内容

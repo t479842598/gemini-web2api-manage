@@ -1,0 +1,39 @@
+name: Release Linux binary
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x86_64:
+    name: Build Linux x86_64 binary
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout source and submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build release bundle
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: ./deploy/build-linux-x86_64.sh
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.tar.gz" \
+            "release/gemini-web2api-manage-linux-x86_64-${GITHUB_REF_NAME}.sha256" \
+            --title "Gemini Web2API Manage ${GITHUB_REF_NAME}" \
+            --generate-notes

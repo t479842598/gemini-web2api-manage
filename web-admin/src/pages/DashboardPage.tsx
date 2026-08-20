@@ -198,7 +198,7 @@ export default function DashboardPage() {
       { icon: Terminal, label: "流式模式", value: config?.force_non_stream ? "强制非流式" : "正常流式", tone: config?.force_non_stream ? "text-warning" : "text-success" },
       { icon: Server, label: "鉴权模式", value: (config?.api_keys?.length ?? 0) ? "密钥鉴权" : "无鉴权", tone: config?.api_keys?.length ? "text-info" : "text-warning" },
     ],
-    [config?.cookie_file, config?.proxy, config?.api_keys, config?.force_non_stream],
+    [config?.cookie_file, config?.proxy, config?.api_keys, config?.force_non_stream, cookieState, proxyState],
   )
 
   const copyText = async (text: string, label = "已复制") => {

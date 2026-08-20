@@ -26,7 +26,8 @@ export default function NetworkPage() {
   }
 
   useEffect(() => {
-    void load()
+    const timer = window.setTimeout(() => void load(), 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const locationText = [network?.country, network?.region, network?.city]

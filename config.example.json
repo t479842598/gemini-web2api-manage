@@ -14,8 +14,11 @@
   ],
   "admin_password": "sk-admin",
   "cookie_file": null,
+  "cookie_files": [],
   "proxy": null,
-  "empty_response_fallback": "Upstream returned an empty response. Please adjust the prompt or try again.",
+  "public_base_url": null,
+  "empty_response_fallback": "Gemini returned an empty response. Check Cookie validity, safety filtering, context length, or model availability.",
   "log_requests": true,
-  "temporary_chats": false
+  "temporary_chats": false,
+  "force_non_stream": false
 }

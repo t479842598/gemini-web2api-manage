@@ -78,7 +78,8 @@ export default function SettingsPage() {
   }
 
   useEffect(() => {
-    void loadStatus()
+    const timer = window.setTimeout(() => void loadStatus(), 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const modelOptions = useMemo(

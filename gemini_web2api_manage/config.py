@@ -4,6 +4,10 @@ Imports the upstream CONFIG dict and adds manage-specific keys.
 Because CONFIG is a shared mutable dict, all modules (upstream + manage)
 see the same configuration object.
 """
+import json
+import os
+from pathlib import Path
+
 from gemini_web2api.config import CONFIG, DEFAULT_CONFIG as UPSTREAM_DEFAULT
 
 # Manage-specific default keys injected into the shared CONFIG dict
@@ -26,3 +30,92 @@ MANAGE_DEFAULTS = {
 for key, value in MANAGE_DEFAULTS.items():
     if key not in CONFIG:
         CONFIG[key] = value
+
+
+def _env_bool(name: str, default=None):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default=None):
+    value = os.environ.get(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def apply_env_config() -> dict:
+    """Apply deployment environment variables to the shared CONFIG dict.
+
+    This is primarily used by the Vercel entrypoint, where a persistent
+    config.json or cookie file cannot be mounted. Cookie text is materialized
+    under the runtime temp/data directory and consumed by the upstream client.
+    """
+    text_fields = {
+        "proxy": "PROXY",
+        "default_model": "DEFAULT_MODEL",
+        "public_base_url": "PUBLIC_BASE_URL",
+        "gemini_bl": "GEMINI_BL",
+        "gemini_base_url": "GEMINI_BASE_URL",
+        "xsrf_token": "XSRF_TOKEN",
+    }
+    for config_key, env_key in text_fields.items():
+        value = os.environ.get(env_key)
+        if value:
+            CONFIG[config_key] = value
+
+    admin_password = os.environ.get("ADMIN_PASSWORD")
+    if admin_password:
+        CONFIG["admin_password"] = admin_password
+
+    api_keys = os.environ.get("API_KEYS")
+    if api_keys:
+        try:
+            parsed = json.loads(api_keys) if api_keys.lstrip().startswith("[") else None
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, list):
+            CONFIG["api_keys"] = [str(item).strip() for item in parsed if str(item).strip()]
+        else:
+            CONFIG["api_keys"] = [item.strip() for item in api_keys.replace(",", "\n").splitlines() if item.strip()]
+
+    cookie = os.environ.get("GEMINI_COOKIE")
+    if cookie:
+        root = Path(os.environ.get("GEMINI_WEB2API_DATA_DIR") or "/tmp/gemini-web2api")
+        root.mkdir(parents=True, exist_ok=True)
+        cookie_path = root / "env-cookie.txt"
+        cookie_path.write_text(cookie.strip() + "\n", encoding="utf-8")
+        CONFIG["cookie_file"] = str(cookie_path)
+        CONFIG["cookie_files"] = [str(cookie_path)]
+
+    int_fields = {
+        "port": "PORT",
+        "retry_attempts": "RETRY_ATTEMPTS",
+        "retry_delay_sec": "RETRY_DELAY_SEC",
+        "request_timeout_sec": "REQUEST_TIMEOUT_SEC",
+        "auth_user": "AUTH_USER",
+    }
+    for config_key, env_key in int_fields.items():
+        value = _env_int(env_key)
+        if value is not None:
+            CONFIG[config_key] = value
+
+    bool_fields = {
+        "log_requests": "LOG_REQUESTS",
+        "temporary_chats": "TEMPORARY_CHATS",
+        "force_non_stream": "FORCE_NON_STREAM",
+    }
+    for config_key, env_key in bool_fields.items():
+        value = _env_bool(env_key)
+        if value is not None:
+            CONFIG[config_key] = value
+
+    host = os.environ.get("HOST")
+    if host:
+        CONFIG["host"] = host
+    return CONFIG

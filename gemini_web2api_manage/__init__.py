@@ -7,7 +7,7 @@ _upstream = os.path.join(os.path.dirname(os.path.dirname(__file__)), '_upstream'
 if os.path.isdir(_upstream) and _upstream not in sys.path:
     sys.path.insert(0, _upstream)
 
-__version__ = "2.1.1"
+__version__ = "3.1.0"
 
 
 # ─── Enhance tool_choice=auto prompt without modifying the upstream submodule ──

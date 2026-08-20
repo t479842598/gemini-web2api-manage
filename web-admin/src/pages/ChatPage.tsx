@@ -101,7 +101,6 @@ async function executeTool(name: string, args: Record<string, unknown>): Promise
     case "calc": {
       try {
         const expr = String(args.expr ?? "0")
-        // eslint-disable-next-line no-new-func
         const result = new Function(`"use strict"; return (${expr})`)()
         return JSON.stringify({ expr, result })
       } catch {
@@ -160,6 +159,15 @@ export default function ChatPage() {
   const imageInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const loadServerFiles = useCallback(async () => {
+    try {
+      const data = await api.files()
+      setServerFiles(data.files ?? [])
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
   useEffect(() => {
     api
       .status()
@@ -170,16 +178,7 @@ export default function ChatPage() {
       .catch(() => toast.error("状态读取失败"))
       .finally(() => setStatusLoading(false))
     void loadServerFiles()
-  }, [])
-
-  const loadServerFiles = useCallback(async () => {
-    try {
-      const data = await api.files()
-      setServerFiles(data.files ?? [])
-    } catch {
-      /* ignore */
-    }
-  }, [])
+  }, [loadServerFiles])
 
   useEffect(() => {
     try {
@@ -303,9 +302,9 @@ export default function ChatPage() {
       }
       const results: ToolCallResult[] = []
       for (const tc of tcs) {
-        let args: Record<string, unknown> = {}
+        let args: Record<string, unknown>
         try {
-          args = JSON.parse(tc.function.arguments || "{}")
+          args = JSON.parse(tc.function.arguments || "{}") as Record<string, unknown>
         } catch {
           args = {}
         }

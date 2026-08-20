@@ -1,12 +1,13 @@
 [project]
 name = "gemini-web2api-manage"
-version = "2.1.1"
+version = "3.1.0"
 description = "Web management console for gemini-web2api (upstream: Sophomoresty/gemini-web2api)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.8"
 dependencies = [
     "httpx>=0.25",
+    "PySocks>=1.7.1",
 ]
 
 [project.scripts]

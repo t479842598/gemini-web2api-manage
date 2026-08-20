@@ -1,0 +1,18 @@
+[Unit]
+Description=Gemini Web2API Manage binary
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=geminiweb
+Group=geminiweb
+WorkingDirectory=/opt/gemini-web2api-manage
+Environment=PYTHONUNBUFFERED=1
+Environment=GEMINI_WEB2API_DATA_DIR=/var/lib/gemini-web2api
+ExecStart=/opt/gemini-web2api-manage/gemini-web2api-manage --config /var/lib/gemini-web2api/config.json
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

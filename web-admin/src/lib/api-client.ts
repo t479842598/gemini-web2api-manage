@@ -45,7 +45,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     credentials: "same-origin",
   })
   const text = await res.text()
-  let json: unknown = {}
+  let json: unknown
   try {
     json = text ? JSON.parse(text) : {}
   } catch {
