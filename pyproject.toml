@@ -1,6 +1,6 @@
 [project]
 name = "gemini-web2api-manage"
-version = "3.1.0"
+version = "3.1.1"
 description = "Web management console for gemini-web2api (upstream: Sophomoresty/gemini-web2api)"
 readme = "README.md"
 license = {text = "MIT"}
