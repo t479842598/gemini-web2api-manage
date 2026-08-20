@@ -633,3 +633,85 @@ def read_logs(offset: int = None, tail: int = 40000) -> dict:
         }
     except OSError as exc:
         return {"content": "", "offset": 0, "size": 0, "path": str(path), "exists": False, "candidates": candidates, "error": str(exc)}
+
+
+# ─── Uploaded file management (chat attachments) ───────────────────────────────
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+MAX_READ_BYTES = 1024 * 1024  # 1 MB for text preview
+
+
+def uploads_dir() -> Path:
+    path = data_dir() / "uploads"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _safe_upload_path(name: str) -> Path:
+    """Resolve a filename strictly inside the uploads dir (no path traversal)."""
+    safe = Path(name).name.strip()
+    if not safe or safe in (".", ".."):
+        raise ValueError("invalid filename")
+    root = uploads_dir().resolve()
+    target = (root / safe).resolve()
+    if not str(target).startswith(str(root) + os.sep) and target != root:
+        raise ValueError("invalid path")
+    return target
+
+
+def list_uploads() -> dict:
+    root = uploads_dir()
+    files = []
+    for p in sorted(root.iterdir()):
+        if not p.is_file():
+            continue
+        try:
+            stat = p.stat()
+        except OSError:
+            continue
+        files.append({
+            "name": p.name,
+            "size": stat.st_size,
+            "modified": int(stat.st_mtime),
+        })
+    return {"ok": True, "dir": str(root), "files": files}
+
+
+def save_upload(name: str, content: bytes) -> dict:
+    if not content:
+        raise ValueError("empty content")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise ValueError(f"file too large (max {MAX_UPLOAD_BYTES // 1024 // 1024}MB)")
+    target = _safe_upload_path(name)
+    target.write_bytes(content)
+    stat = target.stat()
+    return {
+        "ok": True,
+        "file": {"name": target.name, "size": stat.st_size, "modified": int(stat.st_mtime)},
+    }
+
+
+def read_upload_content(name: str) -> dict:
+    target = _safe_upload_path(name)
+    if not target.is_file():
+        raise FileNotFoundError(f"file not found: {name}")
+    size = target.stat().st_size
+    if size > MAX_READ_BYTES:
+        return {"ok": True, "name": target.name, "size": size, "readable": False,
+                "truncated": True, "content": ""}
+    try:
+        content = target.read_bytes().decode("utf-8")
+    except (UnicodeDecodeError, ValueError):
+        return {"ok": True, "name": target.name, "size": size, "readable": False,
+                "truncated": False, "content": ""}
+    return {"ok": True, "name": target.name, "size": size, "readable": True,
+            "truncated": False, "content": content}
+
+
+def delete_upload(name: str) -> dict:
+    target = _safe_upload_path(name)
+    if not target.is_file():
+        raise FileNotFoundError(f"file not found: {name}")
+    target.unlink()
+    return {"ok": True, "deleted": name}
+

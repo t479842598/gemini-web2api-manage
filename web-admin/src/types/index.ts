@@ -139,3 +139,24 @@ export interface CookieItem {
   path: string | null
   content: string | null
 }
+
+export interface UploadFileInfo {
+  name: string
+  size: number
+  modified: number
+}
+
+export interface FilesData {
+  ok: boolean
+  dir: string
+  files: UploadFileInfo[]
+}
+
+export interface FileContentData {
+  ok: boolean
+  name: string
+  size: number
+  readable: boolean
+  truncated: boolean
+  content: string
+}

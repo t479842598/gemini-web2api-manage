@@ -13,13 +13,17 @@ from .admin import (
     admin_config_payload,
     admin_static_status,
     clear_admin_cookie,
+    delete_upload,
+    list_uploads,
     log_status,
     make_admin_cookie,
     network_diagnostics,
     read_admin_asset,
     read_admin_index,
     read_logs,
+    read_upload_content,
     save_config,
+    save_upload,
     service_urls,
     verify_admin_cookie,
     verify_admin_password,
@@ -121,6 +125,11 @@ class GeminiHandler(UpstreamGeminiHandler):
                     return
                 self._handle_admin_stats(parsed.query)
                 return
+            if path == "/admin/api/files" or path.startswith("/admin/api/files/"):
+                if not self._require_admin():
+                    return
+                self._handle_admin_files(parsed.query)
+                return
             if path.startswith("/admin/"):
                 if path.startswith("/admin/api/"):
                     self.send_json({"error": "admin api not found"}, 404)
@@ -155,7 +164,7 @@ class GeminiHandler(UpstreamGeminiHandler):
             # leave the stream untouched so the upstream handler can read it
             # itself — reading here would consume the body and make upstream
             # see an empty payload (400 "invalid JSON").
-            if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/config"):
+            if path in ("/admin/api/login", "/admin/api/logout", "/admin/api/config", "/admin/api/files"):
                 length = int(self.headers.get("Content-Length", 0))
                 body = self.rfile.read(length) if length else b""
 
@@ -168,10 +177,13 @@ class GeminiHandler(UpstreamGeminiHandler):
                         headers={"Set-Cookie": clear_admin_cookie()},
                     )
                     return
-                # /admin/api/config
+                # /admin/api/config or /admin/api/files
                 if not self._require_admin():
                     return
-                self._handle_admin_config(body)
+                if path == "/admin/api/files":
+                    self._handle_admin_upload(body)
+                else:
+                    self._handle_admin_config(body)
                 return
 
             # Fall through to upstream handler (body not yet consumed)
@@ -189,6 +201,57 @@ class GeminiHandler(UpstreamGeminiHandler):
                 pass
 
     # ─── Admin API handlers ───────────────────────────────────────────────
+
+    def do_DELETE(self):
+        try:
+            parsed = urlparse(self.path)
+            path = parsed.path
+            if path == "/admin/api/files":
+                if not self._require_admin():
+                    return
+                self._handle_admin_file_delete(parsed.query)
+                return
+            self.send_json({"error": "not found"}, 404)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _handle_admin_files(self, query: str):
+        from urllib.parse import parse_qs
+        params = parse_qs(query or "")
+        name = params.get("name", [None])[0]
+        if name:
+            try:
+                self.send_json(read_upload_content(name))
+            except (ValueError, FileNotFoundError) as e:
+                self.send_json({"error": {"message": str(e)}}, 400)
+            return
+        self.send_json(list_uploads())
+
+    def _handle_admin_upload(self, body: bytes):
+        import base64
+        req = self._parse_body(body)
+        if req is None:
+            self.send_json({"error": {"message": "invalid JSON"}}, 400)
+            return
+        name = str(req.get("name") or "").strip()
+        content_b64 = req.get("content") or ""
+        try:
+            content = base64.b64decode(content_b64) if content_b64 else b""
+            self.send_json(save_upload(name, content))
+        except Exception as e:
+            self.send_json({"error": {"message": str(e)}}, 400)
+
+    def _handle_admin_file_delete(self, query: str):
+        from urllib.parse import parse_qs
+        params = parse_qs(query or "")
+        name = params.get("name", [None])[0]
+        if not name:
+            self.send_json({"error": {"message": "name required"}}, 400)
+            return
+        try:
+            self.send_json(delete_upload(name))
+        except (ValueError, FileNotFoundError) as e:
+            self.send_json({"error": {"message": str(e)}}, 400)
 
     def _handle_admin_stats(self, query: str):
         from urllib.parse import parse_qs

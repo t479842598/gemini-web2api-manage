@@ -1,12 +1,15 @@
 import type {
   ConfigPayload,
   CookieItem,
+  FileContentData,
+  FilesData,
   LogsData,
   NetworkData,
   SessionInfo,
   StatsData,
   StatsRange,
   StatusData,
+  UploadFileInfo,
 } from "@/types"
 
 const API_BASE = "/admin/api"
@@ -87,6 +90,20 @@ export const api = {
     const qs = sp.toString()
     return request<LogsData>(`/logs${qs ? `?${qs}` : ""}`)
   },
+
+  // ── Uploaded files ──
+  files: () => request<FilesData>("/files"),
+  uploadFile: (name: string, contentBase64: string) =>
+    request<{ ok: boolean; file: UploadFileInfo }>("/files", {
+      method: "POST",
+      body: JSON.stringify({ name, content: contentBase64 }),
+    }),
+  readFile: (name: string) =>
+    request<FileContentData>(`/files/content?name=${encodeURIComponent(name)}`),
+  deleteFile: (name: string) =>
+    request<{ ok: boolean }>(`/files?name=${encodeURIComponent(name)}`, {
+      method: "DELETE",
+    }),
 }
 
 /** 构造 config 保存 payload（cookie 用全量快照协议） */
