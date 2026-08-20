@@ -4,6 +4,7 @@ Inherits the upstream GeminiHandler and adds admin console routes
 (/admin, /admin/api/*) before falling back to upstream behavior.
 """
 import json
+import time
 from urllib.parse import urlparse
 
 from .config import CONFIG
@@ -23,6 +24,14 @@ from .admin import (
     verify_admin_cookie,
     verify_admin_password,
 )
+from .stats import (
+    CapturingWriter,
+    endpoint_from_path,
+    mask_key,
+    parse_captured,
+    recorder,
+)
+from .socks_bridge import apply_proxy_bridge
 
 from gemini_web2api.server import GeminiHandler as UpstreamGeminiHandler
 from gemini_web2api.models import MODELS, resolve_model
@@ -107,6 +116,11 @@ class GeminiHandler(UpstreamGeminiHandler):
                     return
                 self.send_json(network_diagnostics(CONFIG))
                 return
+            if path == "/admin/api/stats":
+                if not self._require_admin():
+                    return
+                self._handle_admin_stats(parsed.query)
+                return
             if path.startswith("/admin/"):
                 asset = read_admin_asset(path)
                 if asset:
@@ -157,7 +171,8 @@ class GeminiHandler(UpstreamGeminiHandler):
                 return
 
             # Fall through to upstream handler (body not yet consumed)
-            super().do_POST()
+            self._run_upstream_post()
+            return
 
         except (BrokenPipeError, ConnectionResetError):
             pass
@@ -170,6 +185,72 @@ class GeminiHandler(UpstreamGeminiHandler):
                 pass
 
     # ─── Admin API handlers ───────────────────────────────────────────────
+
+    def _handle_admin_stats(self, query: str):
+        from urllib.parse import parse_qs
+        params = parse_qs(query or "")
+        range_key = params.get("range", ["7d"])[0]
+        self.send_json(recorder.query_stats(range_key))
+
+    def _request_api_key(self):
+        key = None
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            key = auth[7:]
+        if not key:
+            key = self.headers.get("x-api-key") or self.headers.get("x-goog-api-key")
+        if not key:
+            q = urlparse(self.path).query
+            for pair in q.split("&"):
+                if pair.startswith("key="):
+                    key = pair[4:]
+                    break
+        return mask_key(key or "")
+
+    def _run_upstream_post(self):
+        """Run the upstream POST handler while capturing response stats for
+        /v1 generate calls (chat / responses / google)."""
+        is_call = self.path.startswith("/v1") or self.path.startswith("/v1beta")
+        if not is_call or not CONFIG.get("log_requests", True):
+            super().do_POST()
+            return
+        started = time.time()
+        capture = CapturingWriter(self.wfile)
+        self.wfile = capture
+        finished = False
+        outcome = {"ok": True}
+
+        def finish():
+            nonlocal finished
+            if finished:
+                return
+            finished = True
+            self.wfile = capture.original
+            try:
+                info = parse_captured(bytes(capture.buffer))
+                recorder.record(
+                    endpoint=endpoint_from_path(self.path),
+                    model=info.get("model"),
+                    api_key=self._request_api_key(),
+                    success=outcome["ok"] and info.get("ok", True),
+                    duration_ms=int((time.time() - started) * 1000),
+                    usage=info.get("usage") or {},
+                )
+            except Exception:
+                pass
+
+        try:
+            super().do_POST()
+        except (BrokenPipeError, ConnectionResetError):
+            outcome["ok"] = False
+            finish()
+            raise
+        except Exception:
+            outcome["ok"] = False
+            finish()
+            raise
+        finally:
+            finish()
 
     def _handle_admin_status(self):
         port = int(CONFIG.get("port") or self.server.server_address[1])
@@ -235,7 +316,8 @@ class GeminiHandler(UpstreamGeminiHandler):
                 {"error": {"message": f"save config failed: {e}"}}, 500
             )
             return
-        config = admin_config_payload(updated)
+        apply_proxy_bridge(CONFIG)
+        config = admin_config_payload(CONFIG)
         config["empty_response_fallback"] = (
             config["empty_response_fallback"] or self._empty_response_fallback()
         )

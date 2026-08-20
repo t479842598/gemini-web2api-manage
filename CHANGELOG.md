@@ -1,5 +1,28 @@
 # 更新日志
 
+## v2.2.0 (2026-08-20)
+
+### 功能
+
+- **新增请求统计**：每次 /v1 生成调用自动记录（端点 / 模型 / 脱敏 Key / 成败 / 耗时 / Token 用量），落盘 `data_dir/requests.jsonl`（10MB 限容），重启不丢失
+- **新增管理接口** `GET /admin/api/stats?range=1d|3d|7d|30d|all`：返回总请求 / 成功 / 失败 / 成功率 / Token 消耗 / 平均耗时，以及按模型、按 API Key、按端点的用量聚合与时间趋势
+- **XSRF（at token）自动获取**：Google StreamGenerate 现在强制要求 `at` 参数，服务会自动从 400 响应提取新 token 缓存并重试，无需手动配置 `xsrf_token`
+- **SOCKS5 代理支持**：配置页可填 `socks5://` 代理，服务自动启动本地 HTTP 桥接（pysocks 隧道），上游零改动；原始 socks5 地址在管理台正常显示
+- 统计记录受 `log_requests` 配置控制；API Key 仅存脱敏前缀，不落盘完整密钥
+
+### 已知限制
+
+- 图片上传（多模态）：上游 fork 的 file binding 仍为 WIP，Gemini 返回 `BardErrorInfo [1003]`，待上游修复或深度逆向（详见测试记录）
+
+## v2.1.2 (2026-08-20)
+
+### Bug 修复
+
+- **修复导入 Cookie 后刷新/重启即丢失**：配置与 Cookie 文件统一写入稳定数据目录（`GEMINI_WEB2API_DATA_DIR` > 项目根），启动时改为优先从该目录加载配置，systemd / Docker 等 cwd 与数据目录分离的部署不再丢配置
+- **Cookie 保存协议升级为全量快照（`cookie_items`）**：编辑已有 Cookie 复用原文件、新增自动接续编号不覆盖、删除真正生效
+- 配置写入前自动生成 `config.json.bak` 备份
+- 前端：导入 Cookie 后提示「点击保存配置后生效」，保存成功回显已落盘 Cookie 数量
+
 ## v2.1.1 (2026-08-16)
 
 ### 上游同步（upstream/main 2bb988b）
