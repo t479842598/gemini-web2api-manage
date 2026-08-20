@@ -7,7 +7,7 @@ bootloaders, so Linux artifacts must be built on Linux (or a Linux CI runner).
 from pathlib import Path
 import sys
 
-ROOT = Path(SPECPATH).resolve().parent.parent
+ROOT = Path(SPECPATH).resolve().parent
 UPSTREAM = ROOT / "_upstream"
 if str(UPSTREAM) not in sys.path:
     sys.path.insert(0, str(UPSTREAM))
