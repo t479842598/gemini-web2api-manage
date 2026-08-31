@@ -327,6 +327,9 @@ class GeminiHandler(UpstreamGeminiHandler):
                     "default_model": CONFIG.get("default_model"),
                     "expose_served_model": bool(
                         CONFIG.get("expose_served_model", True)),
+                    # 只报“是否已启用”，不回显令牌本身
+                    "cookie_push_enabled": bool(
+                        CONFIG.get("cookie_push_token")),
                 })
                 return
 
