@@ -25,6 +25,17 @@ MANAGE_DEFAULTS = {
         "\u540e\u91cd\u8bd5\u3002"
     ),
     "cookie_files": [],
+
+    # —— 协议对齐层（spec 03-01）——
+    # 官网 URL 与 payload 的语言标记；上游旧实现硬编码 "en"。
+    "gemini_hl": "en",
+    # bl 版本号后台刷新间隔（秒），下限 300。
+    "bl_refresh_sec": 21600,
+    # 整体覆盖浏览器画像字段（空表示用 protocol.BROWSER_PROFILE 默认值）。
+    # 例：{"user_agent": "...", "chrome_full_version": "152.0.7977.65"}
+    "browser_profile": {},
+    # 是否把官网回报的真实服务模型透出到响应（关闭则只回显请求的模型名）。
+    "expose_served_model": True,
 }
 
 for key, value in MANAGE_DEFAULTS.items():
@@ -63,6 +74,7 @@ def apply_env_config() -> dict:
         "gemini_bl": "GEMINI_BL",
         "gemini_base_url": "GEMINI_BASE_URL",
         "xsrf_token": "XSRF_TOKEN",
+        "gemini_hl": "GEMINI_HL",
     }
     for config_key, env_key in text_fields.items():
         value = os.environ.get(env_key)
@@ -99,6 +111,7 @@ def apply_env_config() -> dict:
         "retry_delay_sec": "RETRY_DELAY_SEC",
         "request_timeout_sec": "REQUEST_TIMEOUT_SEC",
         "auth_user": "AUTH_USER",
+        "bl_refresh_sec": "BL_REFRESH_SEC",
     }
     for config_key, env_key in int_fields.items():
         value = _env_int(env_key)
@@ -109,6 +122,7 @@ def apply_env_config() -> dict:
         "log_requests": "LOG_REQUESTS",
         "temporary_chats": "TEMPORARY_CHATS",
         "force_non_stream": "FORCE_NON_STREAM",
+        "expose_served_model": "EXPOSE_SERVED_MODEL",
     }
     for config_key, env_key in bool_fields.items():
         value = _env_bool(env_key)

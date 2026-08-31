@@ -27,3 +27,6 @@ gemini-auth.json
 _deploy_check.py
 
 release/
+_regress_*.py
+config.json.bak*
+requests.jsonl

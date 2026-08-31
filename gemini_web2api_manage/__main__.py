@@ -4,7 +4,7 @@ import os
 
 from gemini_web2api_manage import __version__
 from gemini_web2api_manage.config import CONFIG, apply_env_config  # loads manage defaults and env overrides
-from gemini_web2api_manage.server import GeminiHandler
+from gemini_web2api_manage.server import GeminiHandler, ThreadedServer
 from gemini_web2api_manage.admin import config_path as legacy_config_path, writable_config_path
 from gemini_web2api_manage import xsrf  # noqa: F401 - installs automatic at-token retry
 from gemini_web2api_manage.socks_bridge import apply_proxy_bridge
@@ -12,7 +12,6 @@ from gemini_web2api_manage.socks_bridge import apply_proxy_bridge
 from gemini_web2api.models import MODELS
 from gemini_web2api.gemini import HAS_HTTPX, fetch_latest_bl
 from gemini_web2api.config import load_config, find_config
-from gemini_web2api.server import ThreadedServer
 
 
 def resolve_config_path(args_config):
@@ -64,6 +63,12 @@ def main():
     new_bl = fetch_latest_bl()
     if new_bl:
         CONFIG["gemini_bl"] = new_bl
+
+    # 官网版本号（bl）几天一发且按会话 A/B 分片下发，只在启动时取一次会越漂越远，
+    # 这里起守护线程定期跟随（失败保留旧值，不进请求关键路径）。
+    from gemini_web2api_manage import protocol as _protocol
+    if _protocol.start_bl_refresher():
+        print(f"  BL refresh: every {int(CONFIG.get('bl_refresh_sec') or 21600)}s")
 
     port = CONFIG["port"]
     server = ThreadedServer((CONFIG["host"], port), GeminiHandler)

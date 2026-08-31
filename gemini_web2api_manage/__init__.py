@@ -7,7 +7,7 @@ _upstream = os.path.join(os.path.dirname(os.path.dirname(__file__)), '_upstream'
 if os.path.isdir(_upstream) and _upstream not in sys.path:
     sys.path.insert(0, _upstream)
 
-__version__ = "3.1.1"
+__version__ = "3.2.0"
 
 
 # ─── Enhance tool_choice=auto prompt without modifying the upstream submodule ──
@@ -56,3 +56,16 @@ def _patch_auto_tool_prompt():
 
 
 _patch_auto_tool_prompt()
+
+
+# ── 安装官网协议对齐层（Chrome 指纹 / URL / payload / 响应元数据）──
+# 顺序很关键：protocol.install() 必须在 `import gemini_web2api_manage.xsrf`
+# 之前执行。xsrf.py 在模块导入时就调用 install() 并捕获当时的
+# `_build_payload` / `generate` 作为被包装对象；先装 protocol，xsrf 才能
+# 包装到 protocol 的版本上（而不是把 protocol 的改动顶掉）。
+# 放在本文件而不是 __main__.py，是为了让任何导入路径（CLI / Vercel 入口 /
+# manager.pyw / 测试）都拿到同一套已对齐行为。
+from . import protocol as _protocol  # noqa: E402
+
+_protocol.install()
+_protocol.install_model_catalog()

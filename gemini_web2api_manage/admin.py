@@ -179,6 +179,10 @@ def admin_config_payload(config: dict) -> dict:
         "empty_response_fallback": config.get("empty_response_fallback") or "",
         "api_keys": config.get("api_keys") or [],
         "gemini_bl": config.get("gemini_bl") or "",
+        "gemini_hl": config.get("gemini_hl") or "en",
+        "bl_refresh_sec": config.get("bl_refresh_sec") or 21600,
+        "expose_served_model": bool(config.get("expose_served_model", True)),
+        "browser_profile": config.get("browser_profile") or {},
         "temporary_chats": bool(config.get("temporary_chats")),
         "force_non_stream": bool(config.get("force_non_stream")),
         "admin_password_set": bool(admin_password(config)),
@@ -496,6 +500,10 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "force_non_stream",
         "temporary_chats",
         "gemini_bl",
+        "gemini_hl",
+        "bl_refresh_sec",
+        "expose_served_model",
+        "browser_profile",
     }
     data = read_config(current_config)
 
@@ -551,6 +559,22 @@ def save_config(current_config: dict, updates: dict) -> dict:
             continue
         if key == "temporary_chats":
             data[key] = bool(value)
+            continue
+        # —— 本次新增的协议对齐配置键：做显式类型收敛，避免前端传字符串污染 ——
+        if key == "bl_refresh_sec":
+            try:
+                data[key] = max(300, int(value))
+            except (TypeError, ValueError):
+                data[key] = 21600
+            continue
+        if key == "expose_served_model":
+            data[key] = bool(value)
+            continue
+        if key == "browser_profile":
+            data[key] = value if isinstance(value, dict) else {}
+            continue
+        if key == "gemini_hl":
+            data[key] = (str(value).strip() if value else None) or "en"
             continue
         if key == "admin_password" and value in ("", None):
             continue

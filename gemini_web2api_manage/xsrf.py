@@ -119,6 +119,9 @@ def install():
     _g._build_payload = _patched_build_payload
     _g.generate = _patched_generate
     _g.generate_stream = _patched_generate_stream
+    # 供 protocol.py 的 httpx 非流式路径复用本层的 token 自愈能力：
+    # 传入响应体文本，抽到新 token 则缓存并返回 True（表示可重试）。
+    _g._xsrf_maybe_handle = _handle_error
     # server.py binds `from .gemini import generate, generate_stream` at import
     # time; patch those references too so the HTTP handlers use our wrappers.
     try:

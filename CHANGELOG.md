@@ -1,5 +1,39 @@
 # 更新日志
 
+## v3.2.0 (2026-08-31)
+
+### 新增
+
+- **响应透出官网实际服务的模型**：新增从 Gemini 响应 `inner[42]` 解析真实服务模型，`/v1/chat/completions`、`/v1/responses`、Google `generateContent` 及流式 chunk 均会把 `model` 写为**实际服务模型**，并新增 `requested_model` / `served_model` 保留用户请求的模型名。此前响应把用户请求的模型名原样回显，而实测匿名请求无论要哪个档位都返回 `3.5 Flash-Lite`，等于对用户谎报模型。可用 `expose_served_model: false` 关闭（管理台配置页可改，无需重启）。
+- **透出会话 ID 与出口地区**：新增解析响应 `inner[1]`（`c_`/`r_` 会话与响应 ID）与 `inner[5]`/`inner[8]`（官网看到的出口 IP 归属地），响应中新增 `gemini_conversation_id`、`gemini_response_id`、`gemini_region`、`gemini_region_code`；`/admin/api/status` 新增 `last_generation` 块，便于排查区域限流与“模型没生效”。
+- **`GET /health` 无鉴权探活端点**：返回 `status`/`version`/`models`/`gemini_bl`/`cookie_configured`/`streaming`/`proxy` 等。此前只有 `/`（302 跳 /admin），部署探活拿不到健康状态。
+- **`bl` 版本号后台定期刷新**：新增守护线程按 `bl_refresh_sec`（默认 21600 秒）周期跟随官网版本号。实测官网 `bl` 几天一发且**按会话 A/B 分片下发**（连续两次加载分别得到 `20260827.05_p0` 与 `20260830.05_p0`），仅启动时取一次会越漂越远。刷新失败保留旧值且不抛出到请求路径。
+- **浏览器画像可配置**：新增 `browser_profile` 配置项（可覆盖任意画像字段）与 `gemini_hl`（语言标记，不再硬编码 `en`）。
+
+### 变更
+
+- **请求头对齐真实 Chrome 152/153 抓包**：以 headless Chrome + CDP 拦截官网原始请求为基准，补齐 `Accept: */*`、`Content-Type` 的 `charset=UTF-8`、完整 Chrome UA（原为被截断的 `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36`，缺 `KHTML, like Gecko` 与版本号）、11 个 `sec-ch-ua-*` Client Hints、4 个 `x-goog-ext-*` 扩展头；`x-goog-ext-525005358-jspb` 与 payload `inner[59]` 使用同一个 UUID（与官网行为一致）。画像集中在 `protocol.BROWSER_PROFILE` 单一常量块，默认固定当前最新稳定版 **153.0.8010.12**（已实测 Google 正常接受）。
+- **URL 参数补齐**：新增 `f.sid`（19 位带符号会话 ID，进程启动时生成一次）；`_reqid` 从 `int(time.time())%1000000` 改为随机起点 + 进程内递增的 7 位数。
+- **payload 与官网对齐**：内层数组长度 102 → 97；`inner[6]` `[0]`→`[1]`、`inner[68]` `1`→`2`、补 `inner[91]=0`、`inner[96]=0`；语言字段与 `hl` 同源。
+- **非流式路径统一到 httpx**：`generate()` 原本走 urllib 且带代理时每次重建 opener（无连接复用），现改为复用与流式相同的 httpx 共享客户端，保留 405→刷 BL 与 `BardErrorInfo` 瞬时错误重试语义；httpx 不可用时自动回落 urllib。
+- **模型目录描述诚实化**：`/v1/models` 各模型描述不再暗示匿名可用高级模型，明确标注“匿名实测被服务端封顶为 3.5 Flash-Lite”与 Cookie 依赖；并写明 `gemini-3.7-flash` 与 `gemini-3.6-flash` 的 mode/think 完全相同、属别名而非独立模型。模型键名全部保留，不影响已有调用方。
+
+### 修复
+
+- **修复服务启动阻塞 30 秒**：CPython 的 `HTTPServer.server_bind()` 会调 `socket.getfqdn("0.0.0.0")` 取服务名，而这是一次必然超时的反向 DNS（实测本机耗时正好 30.0 秒），表现为“启动后 30 秒内端口不监听、探活全部失败”。现由 manage 层 `ThreadedServer` 跳过该查询，启动从 30s+ 降至 4s。
+- **修复 `_reqid` 同秒碰撞**：原 `int(time.time())%1000000` 在 `ThreadedServer` 多线程并发下同一秒内的请求必然重号；现 200 次取样全唯一，并发 8 路实测元数据不串味。
+- **修复 token 用量把非空回答算成 0**：原 `len(text)//4` 使单字符回答的 `completion_tokens` 为 0（生产实测复现：回答 `"9"` → `completion_tokens: 0`）。现改为向上取整且非空至少 1，空回答仍为 0，`total` 自洽。
+- **修复 `gemini_base_url` 对生成请求完全无效**：该配置项在管理台配置页与网络检测中都被读取，但请求 URL 构造器把域名硬编码为 `https://gemini.google.com`，导致“私有反代域名”只影响诊断、不影响实际生成。现已真正接入 URL 构造，`Origin`/`Referer` 同步跟随实际域名。
+- **本地 `config.json` 失效代理**：`proxy` 指向已无监听的 `127.0.0.1:7890`（实测 curl 返回 000，而直连 200），会导致本地起服务全部超时；已改为直连并在 `config.example.json` 补齐本次新增配置键。
+
+### 已知限制
+
+- **匿名模式无法选择模型**：实测 mode 取 1/2/3/4/5/6 与 think 取 0/4 时，响应 `inner[42]` 一律回报 `3.5 Flash-Lite`；注入真实浏览器抓到的 `inner[3]`（1.6KB protobuf token）与 `inner[4]`（32hex）**也不改变路由**。要真实路由需 Cookie，**待验证**。
+- **负结果记录（避免重复逆向）**：payload `inner[3]` 大 token 由前端 `_.xK.serialize` 生成，已验证注入无收益，本层故意不生成该字段。
+- **token 用量仍为估算**：已实测确认官网响应不提供真实 token 计数，本次只修正为不为 0 且自洽，未引入分词器依赖。
+- **管理台前端未展示新字段**：`last_generation`、真实模型分布等已可从 `/admin/api/status` 与 `/admin/api/stats` 读到，React 页面展示属 `03-web-console-revamp` 范围，本次未改前端。
+- **Cookie 路径未验证**：真实模型路由、`at` 是否强制、多模态附件均需带 Cookie 实测（`xsrf_token` 目前被写入 POST body 而非 query，与官网形态是否一致待测）。
+
 ## v3.1.1 (2026-08-21)
 
 ### Bug 修复
