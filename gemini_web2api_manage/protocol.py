@@ -497,6 +497,37 @@ def generate_stream(prompt, model_id, think_mode, file_refs=None, extra_fields=N
                 pass
 
 
+# ─── 9. 认证态相关的错误码处置 ─────────────────────────────────────────────
+# 实测（2026-09-01，带 Cookie）：
+#   * 1099 是**瞬时**错误 —— 推送 Cookie 后首个请求报 1099，紧接着 6/6 全成功；
+#     社区描述也指向"认证握手/会话冲突"类抖动。故与 1060 一样纳入重试。
+#   * 1003 的原文案说"先配 Cookie"，但**配了 Cookie 仍可能收到 1003** ——
+#     那意味着 Google 已把该会话降级为匿名（Cookie 失效/被风控），照原文案提示
+#     会把用户引向错误方向，故按实际状态改写。
+_TRANSIENT_CODES_WITH_COOKIE = frozenset({1060, 1099})
+
+# 文案必须与"当前是否已配 Cookie"无关：install() 执行时 Cookie 往往还没推送进来，
+# 按安装时状态定文案会永远停在错误的"请先配置 Cookie"上。
+_REVISED_HINTS = {
+    1003: ("Gemini 以匿名模式拒绝了附件。若已配置 Cookie，说明服务端没有把它当作有效登录态"
+           "（已过期或被风控降级）—— 请在浏览器里重新登录 Gemini 后用扩展再推送一次；"
+           "若尚未配置 Cookie，请先配置"),
+    1099: ("Gemini 认证握手抖动（瞬时，已自动重试）。若持续出现，通常说明 Cookie 已失效，"
+           "请在浏览器里重新登录 Gemini 后用扩展再推送一次"),
+}
+
+
+def _patch_bard_error_semantics() -> None:
+    """扩展瞬时错误集合 + 修正 1003/1099 的提示文案。"""
+    try:
+        _g._TRANSIENT_BARD_ERRORS = _TRANSIENT_CODES_WITH_COOKIE
+    except Exception:
+        pass
+    hints = getattr(_g, "_BARD_ERROR_HINTS", None)
+    if isinstance(hints, dict):
+        hints.update(_REVISED_HINTS)
+
+
 # ─── 安装 ──────────────────────────────────────────────────────────────────
 _installed = False
 
@@ -509,6 +540,7 @@ def install() -> None:
     _g._get_url = _get_url
     _g._build_payload = _build_payload
     _g._extract_texts_from_line = _extract_texts_from_line
+    _patch_bard_error_semantics()
     _g.generate = generate
     _g.generate_stream = generate_stream
     # server.py 是 `from .gemini import generate, generate_stream` 按值绑定，
