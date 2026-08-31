@@ -12,12 +12,28 @@
  */
 
 const GEMINI_URL = "https://gemini.google.com/app";
-// 主查询用 gemini 页面 URL —— 浏览器实际会发给它的集合就是我们要的集合；
-// 再补两个 Google 域入口，兜住只设在 .google.com 上的少数项。
-const LOOKUP_URLS = [
-  "https://gemini.google.com/app",
-  "https://www.google.com/",
-  "https://accounts.google.com/",
+/**
+ * 查询方式必须多路合并，两个原因（都是实际踩过的坑）：
+ *  1. 官方文档：getAll() “仅检索扩展程序具有主机权限的网域的 Cookie”。
+ *     SID / HSID / APISID / SAPISID / __Secure-1PSID 全部设在 `.google.com`
+ *     这个域上，只按子域（www / gemini / accounts）查会漏掉它们 ——
+ *     所以额外用 `{domain: "google.com"}` 兵查一遇。
+ *  2. 官方文档：“默认情况下，所有 API 方法都针对未分区的 Cookie 运行”。
+ *     Google 已把部分 `__Secure-*PSID*` 改成 Partitioned（CHIPS），
+ *     不带 partitionKey 根本查不到，所以要带分区键再查一轮。
+ */
+const BASE_QUERIES = [
+  { url: "https://gemini.google.com/app" },
+  { url: "https://www.google.com/" },
+  { url: "https://accounts.google.com/" },
+  { domain: "google.com" },
+];
+// Chrome 119+ 支持 partitionKey；130+ 支持 hasCrossSiteAncestor。
+// 老版本会抛错，逐个试错并吞掉失败即可。
+const PARTITION_VARIANTS = [
+  {},
+  { partitionKey: { topLevelSite: "https://google.com" } },
+  { partitionKey: { topLevelSite: "https://google.com", hasCrossSiteAncestor: false } },
 ];
 
 const CRITICAL = ["SAPISID"];
@@ -39,6 +55,7 @@ const pushBtn = $("push");
 const statusEl = $("status");
 const serverInput = $("server");
 const tokenInput = $("token");
+const forceCheck = $("force");
 
 function setStatus(message, kind = "") {
   statusEl.textContent = message;
@@ -62,6 +79,9 @@ function scoreCookie(cookie) {
   if (cookie.httpOnly) s += 4;          // 关键鉴权项都是 HttpOnly，优先保留
   const dom = normalizeDomain(cookie.domain);
   s += Math.min(4, (dom.match(/\./g) || []).length);   // 域越具体越优先
+  // 未分区优先：我们服务端发的是第一方请求，用的就是未分区那份；
+  // 分区那份只用来兜底（否则会把 iframe 场景的值当成登录态）。
+  if (!cookie.partitionKey) s += 6;
   if (cookie.session) {
     s += 1;
   } else if (cookie.expirationDate) {
@@ -74,13 +94,19 @@ function scoreCookie(cookie) {
 async function readGoogleCookies() {
   const stores = await chrome.cookies.getAllCookieStores();
   const all = [];
+  const notes = [];
   for (const store of stores) {
-    for (const url of LOOKUP_URLS) {
-      try {
-        const found = await chrome.cookies.getAll({ storeId: store.id, url });
-        all.push(...found);
-      } catch {
-        // 某些 store 可能不支持按 url 查询，忽略
+    for (const base of BASE_QUERIES) {
+      for (const variant of PARTITION_VARIANTS) {
+        const details = { storeId: store.id, ...base, ...variant };
+        try {
+          const found = await chrome.cookies.getAll(details);
+          all.push(...found);
+        } catch (e) {
+          // 老版本 Chrome 不认识 partitionKey / hasCrossSiteAncestor，
+          // 或该 store 不支持某种查询 —— 降级而非报错。
+          notes.push(`${base.url || base.domain}+${JSON.stringify(variant)}: ${e?.message || e}`);
+        }
       }
     }
   }
@@ -91,7 +117,7 @@ async function readGoogleCookies() {
     const prev = byName.get(c.name);
     if (!prev || scoreCookie(c) > scoreCookie(prev)) byName.set(c.name, c);
   }
-  return byName;
+  return { byName, rawCount: all.length, notes };
 }
 
 function orderedNames(byName) {
@@ -184,24 +210,32 @@ async function readPageMetadata(tabs) {
 
 async function buildSession() {
   const tabs = await chrome.tabs.query({ url: "https://gemini.google.com/*" });
-  const byName = await readGoogleCookies();
+  const { byName, rawCount, notes } = await readGoogleCookies();
   const meta = await readPageMetadata(tabs);
-  return { byName, meta, authUser: Number.isInteger(meta.authUser) ? meta.authUser : 0 };
+  return {
+    byName, meta, notes, rawCount,
+    authUser: Number.isInteger(meta.authUser) ? meta.authUser : 0,
+  };
 }
 
 function describe(s) {
   const v = validate(s.byName);
   const lines = [
-    `Cookie 条数：${s.byName.size}`,
+    `Cookie 条数：${s.byName.size}（原始 ${s.rawCount} 条，去重后）`,
     `SAPISID：${s.byName.has("SAPISID") ? "已取到" : "缺失"}`,
     `会话 Cookie：${v.sessionCookie || "缺失（需 __Secure-1PSID / __Secure-3PSID / SID 之一）"}`,
     `XSRF (SNlM0e)：${s.meta.xsrfToken ? "已取到" : "未取到"}`,
     `bl (cfb2h)：${s.meta.geminiBl || "未取到（将保留服务端现值）"}`,
     `auth_user：${s.authUser}`,
+    "",
+    `读到的 cookie 名：${orderedNames(s.byName).join(", ") || "（无）"}`,
   ];
   if (s.meta.error) lines.push(`页面数据：${s.meta.error}`);
   if (!v.valid) {
-    lines.push("", "会话不完整：需要在同一个浏览器里登录 Gemini 后刷新页面再试。");
+    lines.push("",
+      "会话不完整：需要在同一个浏览器里登录 Gemini 后刷新页面再试。",
+      "若你确认已登录但仍缺 SAPISID，请先到 chrome://extensions 点本扩展的“重新加载”，",
+      "新版修正了 .google.com 域的权限声明（少了它就读不到 Google 主域 cookie）。");
   }
   return lines.join("\n");
 }
@@ -253,7 +287,8 @@ copyBtn.addEventListener("click", async () => {
   try {
     const s = await buildSession();
     const v = validate(s.byName);
-    if (!v.valid) { setStatus(describe(s), "warn"); return; }
+    if (!v.valid && !forceCheck.checked) { setStatus(describe(s), "warn"); return; }
+    if (s.byName.size === 0) { setStatus(describe(s), "warn"); return; }
     const text = buildCookieString(s.byName);
     await navigator.clipboard.writeText(text);
     setStatus(
@@ -277,7 +312,8 @@ pushBtn.addEventListener("click", async () => {
     setStatus("正在读取 cookie…");
     const s = await buildSession();
     const v = validate(s.byName);
-    if (!v.valid) { setStatus(describe(s), "warn"); return; }
+    if (!v.valid && !forceCheck.checked) { setStatus(describe(s), "warn"); return; }
+    if (s.byName.size === 0) { setStatus(describe(s), "warn"); return; }
     const cookie = buildCookieString(s.byName);
 
     setStatus("正在推送…");

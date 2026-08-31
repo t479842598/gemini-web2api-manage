@@ -3,7 +3,10 @@
 一键读取 Gemini 登录 Cookie（**含 HttpOnly**）并直接推送到
 [gemini-web2api-manage](../../README.md)，或复制到剪贴板手动粘贴。
 
-## 为什么需要扩展
+当前版本 **v1.1**：修正了 `.google.com` 主域权限声明缺失，导致
+`SAPISID` / `SID` 完全读不到的问题（详见文末「v1.1 修了什么」）。
+
+## 为什么不装扩展就根本拿不全
 
 本项目鉴权最关键的几个 cookie 全是 **HttpOnly**：
 
@@ -26,6 +29,9 @@
 
 > Chrome 135 起稳定版不再支持用 `--load-extension` 命令行参数加载扩展，
 > 必须走上面这个界面，这是 Chrome 的安全策略。
+>
+> **从 v1.0 升级**：因为改了 `host_permissions`，必须在 `chrome://extensions`
+> 点本扩展卡片上的 **重新加载**（↻）图标，改权限才会生效。只刷新 Gemini 页面不够。
 
 ## 使用
 
@@ -37,6 +43,8 @@
 4. 点 **一键推送到服务器**
 
 成功后无需重启服务，下一个请求即用新 Cookie。
+
+「检查会话」面板会列出**实际读到的 cookie 名**，出问题时直接看那行就知道缺了什么。
 
 ### 路径 B：不装扩展（零配置）
 
@@ -91,5 +99,32 @@ curl -X POST https://<你的域名>/admin/api/config \
 | `tabs` + `scripting` | 在 Gemini 页面读取 `SNlM0e` / `cfb2h` / 账号序号 |
 | `storage` | 本地保存服务地址与令牌 |
 | `clipboardWrite` | 复制到剪贴板 |
-| `host_permissions: *.google.com` | 上述读取的作用域 |
+| `host_permissions: https://*.google.com/*` | **必须含主域通配**，否则 `.google.com` 上的 `SAPISID`/`SID` 会被权限模型过滤掉 |
 | `optional_host_permissions` | 运行时只对你填写的那一个服务地址申请权限，不在安装时索要全站权限 |
+
+## v1.1 修了什么
+
+两个叠加原因导致关键 cookie 读不到，已用**建模了 Chrome 权限与分区语义的反向对照
+实验**逐项确认：
+
+1. **主因：`host_permissions` 少了 `.google.com` 主域。** 官方文档明确 `getAll()`
+   「仅检索扩展程序具有主机权限的网域的 Cookie」。`SAPISID`/`SID`/`HSID` 都设在
+   `.google.com` 这个域上，而 v1.0 只声明了 `https://www.google.com/*`、
+   `https://gemini.google.com/*` 这类子域，**都不覆盖 `.google.com`**，于是这些项
+   被权限模型直接过滤掉。现补上 `https://google.com/*` 与 `https://*.google.com/*`。
+2. **次因：分区 cookie（CHIPS）。** 官方文档：「默认情况下，所有 API 方法都针对
+   未分区的 Cookie 运行」。`__Secure-*PSID*` 这类可能被标为 Partitioned 的项，
+   必须带 `partitionKey` 再查一轮才拿得到（Chrome 119+）。
+
+对照实验结果：
+
+| 场景 | 读到的关键项 |
+|---|---|
+| v1.0（旧权限 + 旧查询） | 只剩子域项，`SAPISID`/`SID`/`__Secure-1PSID` **全缺** |
+| 只修权限 | `SAPISID`/`SID` 回来，仍缺 `__Secure-1PSID` |
+| 只修查询 | 依旧全缺（证明权限才是主因） |
+| v1.1（两者都改） | **全部齐全** |
+
+另外新增：查询改为多路合并（三个子域 `url` 查询 + `{domain: "google.com"}` 域查询 ×
+带/不带 `partitionKey` 变体），未分区那份优先（服务端发的是第一方请求）；
+「检查会话」列出实际读到的 cookie 名；加了「会话不完整时也强制推送」逃生阀。

@@ -28,6 +28,7 @@
       min-height: 40px; max-height: 230px; overflow-y: auto;
     }
     .warn { color: #b34800; } .ok { color: #17823b; }
+    .ver { font-size: 11px; opacity: .55; font-weight: normal; }
     details { margin-top: 10px; font-size: 12px; }
     summary { cursor: pointer; opacity: .8; }
     label { display: block; margin: 8px 0 3px; font-size: 12px; opacity: .8; }
@@ -36,11 +37,16 @@
       border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas);
       border-radius: 6px; background: Canvas; color: CanvasText;
     }
+    label.force {
+      display: flex; align-items: center; gap: 6px; margin-top: 8px;
+      font-size: 11px; opacity: .8; cursor: pointer;
+    }
+    label.force input { width: auto; }
     code { direction: ltr; unicode-bidi: embed; }
   </style>
 </head>
 <body>
-  <h1>Gemini Cookie Push</h1>
+  <h1>Gemini Cookie Push <span class="ver">v1.1</span></h1>
   <p class="hint">
     用 <code>chrome.cookies</code> 读取登录态，<strong>包含 HttpOnly</strong>
     （<code>SAPISID</code> / <code>__Secure-1PSID</code> 等控制台里拿不到的都在这里）。
@@ -52,6 +58,9 @@
     <button id="copy" type="button">复制到剪贴板</button>
   </div>
   <button id="push" class="primary" type="button">一键推送到服务器</button>
+  <label class="force">
+    <input id="force" type="checkbox"> 会话不完整时也强制推送（自己承担风险）
+  </label>
 
   <p id="status">准备就绪。先在 Gemini 里登录，再点「检查会话」。</p>
 
