@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 
 from .config import CONFIG
 from . import __version__
+from . import auth_state
 from . import protocol
 from .admin import (
     admin_config_payload,
@@ -330,6 +331,8 @@ class GeminiHandler(UpstreamGeminiHandler):
                     # 只报“是否已启用”，不回显令牌本身
                     "cookie_push_enabled": bool(
                         CONFIG.get("cookie_push_token")),
+                    # 认证态只读快照（不发探测请求，避免拖慢探活）
+                    "auth": auth_state.snapshot(),
                 })
                 return
 
@@ -354,6 +357,12 @@ class GeminiHandler(UpstreamGeminiHandler):
                 if not self._require_admin():
                     return
                 self.send_json(network_diagnostics(CONFIG))
+                return
+            if path == "/admin/api/auth-probe":
+                # 强制重新探测一次认证态（会消耗一个真实 Google 请求，故仅管理员）
+                if not self._require_admin():
+                    return
+                self.send_json(auth_state.check(force=True))
                 return
             if path == "/admin/api/stats":
                 if not self._require_admin():
@@ -670,6 +679,7 @@ class GeminiHandler(UpstreamGeminiHandler):
             "version": __version__,
             "models": models,
             "config": config,
+            "auth": auth_state.snapshot(),
             "last_generation": protocol.last_meta(),
             "urls": service_urls(
                 self.headers.get("Host", ""),

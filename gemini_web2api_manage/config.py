@@ -39,6 +39,8 @@ MANAGE_DEFAULTS = {
     # 一键推送 Cookie 的令牌。为空（默认）时 /admin/api/cookie-push 完全关闭，
     # 返回 404 且与“该端点不存在”不可区分 —— 不在公网凭空多一个写入口。
     "cookie_push_token": None,
+    # 认证态探测缓存 TTL（秒）。探测会消耗一个真实 Google 请求，故必须缓存。
+    "auth_probe_ttl_sec": 600,
 }
 
 for key, value in MANAGE_DEFAULTS.items():
@@ -116,6 +118,7 @@ def apply_env_config() -> dict:
         "request_timeout_sec": "REQUEST_TIMEOUT_SEC",
         "auth_user": "AUTH_USER",
         "bl_refresh_sec": "BL_REFRESH_SEC",
+        "auth_probe_ttl_sec": "AUTH_PROBE_TTL_SEC",
     }
     for config_key, env_key in int_fields.items():
         value = _env_int(env_key)

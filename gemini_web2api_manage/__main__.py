@@ -70,6 +70,15 @@ def main():
     if _protocol.start_bl_refresher():
         print(f"  BL refresh: every {int(CONFIG.get('bl_refresh_sec') or 21600)}s")
 
+    # Cookie 登录态会被 Google 悄悄降级为匿名（实测约 30-40 分钟 / 数十次请求后
+    # 发生），降级后服务不报错、只是模型变回 lite，用户无从得知。起一个后台探测
+    # 线程把状态维持在 /health 里，并在发生降级时记一条明确日志。
+    if CONFIG.get("cookie_file") or CONFIG.get("cookie_files"):
+        from gemini_web2api_manage import auth_state as _auth
+        _auth.start_background_monitor()
+        print("  Auth probe: background monitor on "
+              f"(ttl {int(CONFIG.get('auth_probe_ttl_sec') or 600)}s)")
+
     port = CONFIG["port"]
     server = ThreadedServer((CONFIG["host"], port), GeminiHandler)
     print(f"gemini-web2api-manage v{__version__}")

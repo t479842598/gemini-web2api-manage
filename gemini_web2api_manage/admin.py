@@ -184,6 +184,7 @@ def admin_config_payload(config: dict) -> dict:
         "expose_served_model": bool(config.get("expose_served_model", True)),
         # 只回显“是否已设置”，绝不回显令牌明文
         "cookie_push_token_set": bool(config.get("cookie_push_token")),
+        "auth_probe_ttl_sec": config.get("auth_probe_ttl_sec") or 600,
         "browser_profile": config.get("browser_profile") or {},
         "temporary_chats": bool(config.get("temporary_chats")),
         "force_non_stream": bool(config.get("force_non_stream")),
@@ -528,6 +529,7 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "bl_refresh_sec",
         "expose_served_model",
         "cookie_push_token",
+        "auth_probe_ttl_sec",
         "browser_profile",
     }
     data = read_config(current_config)
@@ -619,6 +621,12 @@ def save_config(current_config: dict, updates: dict) -> dict:
             continue
         if key == "browser_profile":
             data[key] = value if isinstance(value, dict) else {}
+            continue
+        if key == "auth_probe_ttl_sec":
+            try:
+                data[key] = max(120, int(value))
+            except (TypeError, ValueError):
+                data[key] = 600
             continue
         if key == "gemini_hl":
             data[key] = (str(value).strip() if value else None) or "en"
