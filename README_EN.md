@@ -213,6 +213,33 @@ The chat page includes:
 | `POST` | `/v1/chat/completions` | Chat Completions, streaming and tools |
 | `POST` | `/v1/responses` | Responses API for Codex-compatible clients |
 
+### Health
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | No auth required. Returns `status`, `version`, `models`, `gemini_bl`, `gemini_base_url`, `cookie_configured`, `streaming`, `proxy`, `default_model`, `expose_served_model` |
+
+### About the actually served model (important)
+
+Gemini's web endpoint is a reverse-engineered interface. **Measured on 2026-08-31: in anonymous mode the model tier (`mode`) and thinking tier (`think`) in the request body have no effect on Google's routing** — for mode 1/2/3/4/5/6 the upstream-reported served model (response `inner[42]`) is always `3.5 Flash-Lite`. It was also verified that injecting the real browser's `inner[3]` (1.6 KB protobuf token) and `inner[4]` (32-hex) does **not** change routing either.
+
+Since v3.2.0 generation responses (including streaming chunks) report the model that actually served the request:
+
+| Field | Meaning |
+|---|---|
+| `model` | The model **actually serving** the request (e.g. `3.5 Flash-Lite`) |
+| `requested_model` | The model name you asked for (e.g. `gemini-3.1-pro`) |
+| `served_model` | Same as `model`, more explicit |
+| `gemini_conversation_id` / `gemini_response_id` | Upstream conversation / response IDs |
+| `gemini_region` / `gemini_region_code` | Egress IP region as seen by Google (useful for regional rate-limit debugging) |
+
+Notes:
+
+- All model keys are preserved, so existing clients keep working; `/v1/models` descriptions now state the anonymous limitation and Cookie dependency per tier.
+- Set `expose_served_model: false` (or `EXPOSE_SERVED_MODEL=false`) to restore the old behaviour where `model` only echoes the requested name. Editable in the admin console without a restart.
+- `/admin/api/stats` (`by_model`) and `/admin/api/status` (`last_generation`) surface the real model distribution and the latest egress region.
+- **Whether a Cookie unlocks real model routing is not yet verified** (requires testing with a valid Cookie).
+
 ### Google-compatible
 
 | Method | Path | Description |

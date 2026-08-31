@@ -244,6 +244,33 @@ python -m gemini_web2api_manage --proxy http://127.0.0.1:7890
 | `POST` | `/v1/chat/completions` | Chat Completions，支持流式、工具和图片消息格式 |
 | `POST` | `/v1/responses` | Responses API，兼容 Codex CLI |
 
+### 探活接口
+
+| 方法 | 路径 | 说明 |
+|---|---|---|
+| `GET` | `/health` | 无需鉴权。返回 `status`、`version`、`models`、`gemini_bl`、`gemini_base_url`、`cookie_configured`、`streaming`、`proxy`、`default_model`、`expose_served_model`，用于部署健康检查与排障 |
+
+### 关于实际服务模型（重重要）
+
+Gemini 网页端是逆向接口。**实测（2026-08-31）证明：匿名模式下请求体里的模型档位（mode）与思考档位（think）对 Google 的路由完全无效** —— mode 取 1/2/3/4/5/6 时，官网回报的实际服务模型（响应 `inner[42]`）一律为 `3.5 Flash-Lite`。另已验证：注入真实浏览器抓到的 `inner[3]`（1.6KB protobuf token）与 `inner[4]`（32hex）**也不改变路由**。
+
+因此自 v3.2.0 起，生成响应（含流式 chunk）会如实回报官网实际服务的模型：
+
+| 字段 | 含义 |
+|---|---|
+| `model` | **官网实际服务的模型**（如 `3.5 Flash-Lite`） |
+| `requested_model` | 你请求的模型名（如 `gemini-3.1-pro`） |
+| `served_model` | 与 `model` 同值，语义更显式 |
+| `gemini_conversation_id` / `gemini_response_id` | 官网回报的会话 / 响应 ID |
+| `gemini_region` / `gemini_region_code` | 官网看到的出口 IP 归属地（排查区域限流用） |
+
+行为说明：
+
+- 模型键名全部保留，不影响已有调用方；`/v1/models` 的 `description` 已标注各档位的匿名限制与 Cookie 依赖。
+- 设 `expose_served_model: false`（或环境变量 `EXPOSE_SERVED_MODEL=false`，管理台配置页可改、无需重启）可退回旧行为，`model` 只回显请求名。
+- 管理台 `/admin/api/stats` 的 `by_model` 与 `/admin/api/status` 的 `last_generation` 会展示真实模型分布与最近一次出口地区。
+- **Cookie 能否解锁真实模型路由尚未验证**（需带 Cookie 实测）。
+
 ### Google 原生接口
 
 | 方法 | 路径 | 说明 |
