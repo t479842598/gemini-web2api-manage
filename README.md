@@ -279,6 +279,55 @@ Gemini 网页端是逆向接口。**实测（2026-08-31）证明：匿名模式�
 | `POST` | `/v1beta/models/{model}:generateContent` | 非流式 Gemini 请求 |
 | `POST` | `/v1beta/models/{model}:streamGenerateContent` | 流式 Gemini 请求 |
 
+### 真实多轮会话续接（需 Cookie）
+
+默认行为是把整段历史压平成一条 prompt 发送（匿名下的唯一可行方案）。
+**配置了有效 Cookie 时可以用 Gemini 服务端的真实会话续接**，省掉重复发送历史：
+
+```jsonc
+// 第一次请求，响应里会带：
+//   "gemini_conversation_id": "c_69ac9c3906127068",
+//   "gemini_response_id":     "r_ea35a8df8ebae392"
+// 下一次请求把这两个字段原样带回即可：
+{
+  "model": "gemini-3.1-pro",
+  "messages": [{"role": "user", "content": "What is my name?"}],
+  "gemini_conversation_id": "c_69ac9c3906127068",
+  "gemini_response_id": "r_ea35a8df8ebae392"
+}
+```
+
+行为说明：
+
+- **仅在配置了 Cookie 时生效**。匿名下带真实 ID 实测返回 `BardErrorInfo [1096]`，
+  所以未配 Cookie 时这两个字段会被忽略，走原有的历史压平路径。
+- **失败自动降级**。若续接被拒（`1096`/`1097`/`1003`），服务会清掉续接 ID
+  按无状态方式自动重试一次，不会让你的请求直接失败。
+- 实测确认有效：第二轮能正确复述出第一轮告知的名字与年龄。
+
+### 认证态探测（`/health` 的 `auth` 字段）
+
+Cookie 会被 Google 悄悄降级为匿名 —— 表现是模型默默变回 `3.5 Flash-Lite`，
+服务本身不报错。为免你靠猜，`/health` 与 `/admin/api/status` 会报告认证态：
+
+```jsonc
+"auth": {
+  "state": "authenticated",   // authenticated | anonymous | no_cookie | unknown | error
+  "detail": "Google 在校验 at（缺 at 返回 400）⇒ 登录态有效",
+  "has_cookie": true, "age_sec": 7, "stale": false
+}
+```
+
+判据是实测确立的：**带 Cookie 但不带 `at` 发一次请求**，`HTTP 400` 说明 Google 在
+校验 `at`（登录态有效），`HTTP 200` 说明已不校验（被当作匿名）。这比看 `served_model`
+可靠 —— 匿名恒为 lite，但登录态下 lite 也可能是正常低档位，会误判。
+
+探测会消耗一个真实 Google 请求，因此结果按 `auth_probe_ttl_sec`（默认 600 秒）缓存；
+轮询管理台只读快照，不会打 Google。需要立刻刷新时调 `GET /admin/api/auth-probe`（管理员）。
+状态从 `authenticated` 翻到 `anonymous` 时会记一条明确日志。
+
+**实测存活窗口约 20–35 分钟**（数十次请求后）。降级后请用扩展重新推送一次 Cookie。
+
 ### 管理接口
 
 管理接口除登录、登出、认证检查外都需要管理会话 Cookie。

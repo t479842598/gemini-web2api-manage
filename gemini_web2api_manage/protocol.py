@@ -105,9 +105,33 @@ def reset_meta() -> None:
     _tls.meta = {}
 
 
+def reset_continuation() -> None:
+    """清掉本线程登记的续接会话。"""
+    _tls.cont = None
+
+
 def get_meta() -> dict:
     """返回当前线程最近一次响应解析出的元数据副本。"""
     return dict(getattr(_tls, "meta", None) or {})
+
+
+def set_continuation(conversation_id, response_id) -> None:
+    """登记本次请求要续接的 Gemini 会话。
+
+    实测（2026-09-01，带 Cookie）：payload 的 inner[2] 前两位放
+    [conversation_id, response_id] 时，服务端会真正续接会话且不再报 1097；
+    放错位置（如 ["", cid, rid]）则返回空回复。两个 id 来自上一次响应
+    inner[1]，我们已通过 gemini_conversation_id / gemini_response_id 透出。
+    需要有效登录态 —— 匿名下 1097 仍被硬拒。
+    """
+    if conversation_id and response_id:
+        _tls.cont = (str(conversation_id), str(response_id))
+    else:
+        _tls.cont = None
+
+
+def get_continuation():
+    return getattr(_tls, "cont", None)
 
 
 def set_sse_writer(writer) -> None:
@@ -247,6 +271,12 @@ def _build_payload(prompt, model_id, think_mode, file_refs=None, extra_fields=No
         inner[0] = [prompt, 0, None, None, None, None, 0]
     inner[1] = [_hl()]
     inner[2] = ["", "", "", None, None, None, None, None, None, ""]
+    # 只在配了 Cookie 时才尝试续接：匿名下带真实 ID 实测返回 1096，
+    # 等于把一个本来可用的请求变成报错。宁可不上优化，也不能引入回归。
+    cont = get_continuation() if (CONFIG.get("cookie_file")
+                                  or CONFIG.get("cookie_files")) else None
+    if cont:
+        inner[2] = [cont[0], cont[1], "", None, None, None, None, None, None, ""]
     # inner[3] / inner[4] 故意留 null：实测注入真实浏览器 token 不改变模型路由。
     inner[6] = [1]          # 上游原为 [0]，官网为 [1]
     inner[7] = 1
@@ -401,7 +431,22 @@ def _g_http_error(code, text):
 
 
 def generate(prompt, model_id, think_mode, file_refs=None, extra_fields=None) -> str:
-    """非流式生成：httpx 可用时走共享客户端，否则回落上游 urllib 实现。"""
+    """非流式生成：httpx 可用时走共享客户端，否则回落上游 urllib 实现。
+
+    带续接 ID 时若命中续接类错误，清掉 ID 按无状态重试一次。
+    """
+    cont_used = get_continuation()
+    try:
+        return _generate_once(prompt, model_id, think_mode, file_refs, extra_fields)
+    except _g.BardError as e:
+        if not (cont_used and e.code in _CONTINUATION_FAILURE_CODES):
+            raise
+        _g.log(f"continuation failed ({e.code}); retrying stateless")
+        set_continuation(None, None)
+        return _generate_once(prompt, model_id, think_mode, file_refs, extra_fields)
+
+
+def _generate_once(prompt, model_id, think_mode, file_refs=None, extra_fields=None) -> str:
     client = _g._get_httpx_client() if _g.HAS_HTTPX else None
     if client is None:
         reset_meta()
@@ -480,12 +525,25 @@ _orig_generate_stream = _g.generate_stream
 
 def generate_stream(prompt, model_id, think_mode, file_refs=None, extra_fields=None):
     reset_meta()
+    cont_used = get_continuation()
     emitted = 0
     try:
-        for delta in _orig_generate_stream(
-                prompt, model_id, think_mode, file_refs, extra_fields):
-            emitted += len(delta or "")
-            yield delta
+        try:
+            for delta in _orig_generate_stream(
+                    prompt, model_id, think_mode, file_refs, extra_fields):
+                emitted += len(delta or "")
+                yield delta
+        except _g.BardError as e:
+            # 仅在尚未输出任何内容时才降级重试，避免重复输出
+            if not (cont_used and emitted == 0
+                    and e.code in _CONTINUATION_FAILURE_CODES):
+                raise
+            _g.log(f"stream continuation failed ({e.code}); retrying stateless")
+            set_continuation(None, None)
+            for delta in _orig_generate_stream(
+                    prompt, model_id, think_mode, file_refs, extra_fields):
+                emitted += len(delta or "")
+                yield delta
     finally:
         _store_meta(prompt_chars=len(prompt or ""), response_chars=emitted)
         # 通知 SSE 改写包装器：流已结束，把暂存的块强制 flush，保证不丢字节
@@ -506,6 +564,11 @@ def generate_stream(prompt, model_id, think_mode, file_refs=None, extra_fields=N
 #     会把用户引向错误方向，故按实际状态改写。
 _TRANSIENT_CODES_WITH_COOKIE = frozenset({1060, 1099})
 
+# 会话续接失败的错误码（实测）：1096 匿名续接被拒、1097 旧文档记录的续接拒绝、
+# 1003 引用不被接受（含伪造 ID）。命中这些且本次确实带了续接 ID 时，
+# 清掉续接按无状态方式重试一次 —— 续接是优化，不该因为它把可用请求变成报错。
+_CONTINUATION_FAILURE_CODES = frozenset({1096, 1097, 1003})
+
 # 文案必须与"当前是否已配 Cookie"无关：install() 执行时 Cookie 往往还没推送进来，
 # 按安装时状态定文案会永远停在错误的"请先配置 Cookie"上。
 _REVISED_HINTS = {
@@ -513,8 +576,13 @@ _REVISED_HINTS = {
     # 下 served=3.1 Pro、缺 at 返回 400，但带图请求仍报 1003。所以 1003 与登录态
     # 无关，是上游 file binding 链路本身未被 Gemini 接受（上游标注 WIP）。
     # 之前写成"Cookie 失效/被降级"会把用户引向错误方向，故按实测改回准确表述。
-    1003: ("Gemini 拒绝了附件引用：上游的文件绑定链路（content-push 上传成功，"
-           "但生成的 file_refs 未被模型侧接受）尚未打通，与是否配置 Cookie 无关"),
+    # 实测（2026-09-01）1003 是通用的"引用不被接受"：伪造的会话续接 ID 与
+    # 附件引用都会触发它，且带有效 Cookie 时附件仍被拒 —— 与登录态无关。
+    1003: ("Gemini 拒绝了请求里的引用（附件 file_refs 或会话续接 ID）。"
+           "附件路径在有效登录态下仍被拒，属上游 file binding 未打通；"
+           "若你传了 gemini_conversation_id，请确认它来自上一次真实响应"),
+    # 匿名续接实测返回 1096（既有文档写的 1097 未复现，一并保留兼容）
+    1096: "Gemini 拒绝匿名会话续接：续接需要有效登录态，请配置 Cookie 或改为携带完整历史",
     1099: ("Gemini 认证握手抖动（瞬时，已自动重试）。若持续出现，通常说明 Cookie 已失效，"
            "请在浏览器里重新登录 Gemini 后用扩展再推送一次"),
 }
@@ -531,6 +599,39 @@ def _patch_bard_error_semantics() -> None:
         hints.update(_REVISED_HINTS)
 
 
+# ─── 10. 从请求里捕获续接会话 ID ───────────────────────────────────────────
+# 上游各 handler 都先调 `self._parse_body(body)` 拿请求，这是唯一的公共入口，
+# 在这里把 gemini_conversation_id / gemini_response_id 摘出来登记到 thread-local，
+# 就不必复制上游那 100 多行 _handle_chat。客户端把上一次响应里的这两个字段
+# 原样带回即可续接（响应字段由 server.py 的注入逻辑提供）。
+_orig_parse_body = None
+
+
+def _patched_parse_body(self, body):
+    req = _orig_parse_body(self, body)
+    try:
+        if isinstance(req, dict):
+            cid = req.get("gemini_conversation_id") or req.get("conversation_id")
+            rid = req.get("gemini_response_id") or req.get("response_id")
+            set_continuation(cid, rid)
+    except Exception:
+        pass
+    return req
+
+
+def _install_continuation_hook() -> None:
+    global _orig_parse_body
+    try:
+        import gemini_web2api.server as _s
+        cls = getattr(_s, "GeminiHandler", None)
+        if cls is None or _orig_parse_body is not None:
+            return
+        _orig_parse_body = cls._parse_body
+        cls._parse_body = _patched_parse_body
+    except Exception:
+        pass
+
+
 # ─── 安装 ──────────────────────────────────────────────────────────────────
 _installed = False
 
@@ -544,6 +645,7 @@ def install() -> None:
     _g._build_payload = _build_payload
     _g._extract_texts_from_line = _extract_texts_from_line
     _patch_bard_error_semantics()
+    _install_continuation_hook()
     _g.generate = generate
     _g.generate_stream = generate_stream
     # server.py 是 `from .gemini import generate, generate_stream` 按值绑定，
