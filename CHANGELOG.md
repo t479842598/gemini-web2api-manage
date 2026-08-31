@@ -1,5 +1,29 @@
 # 更新日志
 
+## v3.3.1 (2026-08-31)
+
+### 修复
+
+- **修复扩展读不到 `SAPISID` / `SID`，导致推送一直提示“会话不完整”**。用户实测反馈：「检查会话」只读到 8 条 cookie、`SAPISID` 与会话 Cookie 全部缺失，但 `SNlM0e` 能取到（说明浏览器确实已登录）—— 即问题在扩展读取逻辑而不是登录态。两个叠加原因：
+  1. **主因：`manifest.json` 的 `host_permissions` 只声明了 `www` / `gemini` / `accounts` 等子域，都不覆盖 `.google.com` 主域。** 官方文档明确 `getAll()`「仅检索扩展程序具有主机权限的网域的 Cookie」，而 `SAPISID`/`SID`/`HSID` 全设在 `.google.com` 上，于是被权限模型直接过滤。已补上 `https://google.com/*` 与 `https://*.google.com/*`。
+  2. **次因：分区 cookie（CHIPS）。** 官方文档：「默认情况下，所有 API 方法都针对未分区的 Cookie 运行」，`__Secure-*PSID*` 这类可能被标为 Partitioned 的项必须带 `partitionKey` 再查一轮（Chrome 119+）。
+
+  根因已用**建模了 Chrome 权限过滤与分区语义的反向对照实验**逐项确认：v1.0 只剩子域项（复现用户现象）→ 只修权限则 `SAPISID`/`SID` 回来但仍缺 `__Secure-1PSID` → 只修查询依旧全缺（证明权限是主因）→ 两者都改后关键项齐全。
+
+### 变更
+
+- **cookie 查询改为多路合并**：三个子域 `url` 查询 + `{domain: "google.com"}` 域查询，各自再叠加带/不带 `partitionKey` 的变体；老版本 Chrome 不认识 `partitionKey` / `hasCrossSiteAncestor` 时逐个试错降级，不整体失败。同名去重时**未分区那份优先**（服务端发的是第一方请求，不该误用 iframe 场景的值）。
+- **「检查会话」新增诊断输出**：列出实际读到的 cookie 名与「原始 N 条 / 去重后 M 条」，下次再出问题能直接定位。
+- **新增「会话不完整时也强制推送」逃生阀**，避免关键字段缺失时完全卡住。
+
+### 升级注意
+
+改了 `host_permissions`，必须在 `chrome://extensions` 点扩展卡片上的 **重新加载（↻）** 才会生效，只刷新 Gemini 页面不够。
+
+### 验证
+
+扩展逻辑 **12/12**（mock 已建模权限过滤与分区语义）、解析 **13/13**、推送端到端 **21/21**、协议回归 **17/17**，共 63 项断言全通过。
+
 ## v3.3.0 (2026-08-31)
 
 ### 新增
