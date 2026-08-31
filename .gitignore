@@ -30,3 +30,6 @@ release/
 _regress_*.py
 config.json.bak*
 requests.jsonl
+_test_*.py
+cookies/
+config.json.pre-push.bak

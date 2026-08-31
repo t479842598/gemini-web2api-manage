@@ -1,5 +1,32 @@
 # 更新日志
 
+## v3.3.0 (2026-08-31)
+
+### 新增
+
+- **一键获取并送达 Gemini Cookie**：解决“关键鉴权 cookie 全是 HttpOnly、控制台脚本拿不到、Chrome Application 面板只能一条条看”的老问题。新增自带扩展 `tools/gemini-cookie-sync/`，用 `chrome.cookies.getAll()` 读取**含 HttpOnly** 的完整 cookie（`SAPISID` / `__Secure-1PSID` / `SNlM0e` 这些 `document.cookie` 根拿不到的都在），点一下直接推送到服务端并**立即生效（无需重启）**。扩展同时提供「复制到剪贴板」兼容手动粘贴。
+- **推送端点 `POST /admin/api/cookie-push`**：走独立推送令牌（`X-Cookie-Push-Token`），**默认关闭** —— `cookie_push_token` 为空时返回 404 且与“该端点不存在”不可区分，不会在公网凭空多一个写入口。令牌用 `hmac.compare_digest` 常量时间比较，按来源 IP 滑窗限流（5 分钟内 8 次失败 → 429），长度不足 16 字符的令牌直接拒绝。不用管理台会话 Cookie 鉴权，是因为扩展是 `chrome-extension://` 源，跳域携带凭据会被浏览器 CORS 禁止。
+- **宽容粘贴解析（服务端，React 前端零改动即受益）**：管理台 Cookie 输入框现在自动识别并归一四种输入 —— 裸 `k=v; k=v`、DevTools「Copy as cURL」（bash 与 Windows cmd 两种续行风格）、扩展导出的 `gemini-auth.json`、`Cookie:` 头或整块请求头。落盘只保存归一后的纯 cookie 串。
+- **推送/粘贴时一并应用随带字段**：来源若携带 `auth_user` / `xsrf_token` / `gemini_bl`，一次动作全部生效，不再需要手工改四个配置键。
+- **Cookie 写入可回滚**：任一环节失败则恢复 CONFIG 原值并删除已写的 cookie 文件，一坑坏推送不会把可用配置搞坏。
+
+### 变更
+
+- **不再需要上游的 `gemini-auth.json` 手工链路**：旧流程（扩展导出文件 → `cp` 到项目 → `jq` 改 `config.json` 四个键 → 重启）在服务跑在远程机器时基本走不通；现在一次推送完成。上游扩展与 submodule 保持原样不动，本层在主仓库自带一份。
+- **扩展权限最小化**：服务端地址用 `optional_host_permissions` + 运行时 `chrome.permissions.request` 只对用户填写的那一个源申请，不在安装时索要全站权限。
+
+### 安全
+
+- Cookie 串等同 Google 账号登录态：接口响应与服务端日志**只记录条数与关键字段存在性，绝不回显明文**；cookie 文件写入后 `chmod 600`；`config.json` 落盘前保留 `.pre-push.bak`。
+- 怀疑泄露时：服务端改掉 `cookie_push_token` 即可作废。
+
+### 验证
+
+- `cookie_ingest` 解析测试 **13/13 PASS**（含真实形态的 cURL bash/cmd、整块请求头、带 `=` 的 COMPASS 值、同名去重、垃圾输入不崩）；额外修正一处真 bug：`detect_format` 的 header 判定漏了 `re.I`，导致 `Cookie:` 大写开头时整块输入落到 raw 分支、把 `charset=UTF-8` 当成 cookie 名。
+- 推送端点端到端测试 **21/21 PASS**：401/429/404 关闭态、裸串与 JSON 与 cURL 三种推送、随带字段应用、`gemini_bl` 更新、落盘内容与 600 权限、重启后持久、弱令牌拒绝、管理台粘贴归一。
+- 扩展逻辑测试 **11/11 PASS**：在 Node 中注入 mock 的 `chrome.*` 与最小 DOM、执行 `popup.js` 真实源码，`fetch` 打到真实本地服务端 —— 验证能读出 HttpOnly、丢弃非 Google 域项、推送成功、令牌错误时提示清晰。
+  - 诚实说明：未能在自动化浏览器里真实加载扩展。Chrome 152 稳定版已禁用 `--load-extension`（自 v135 起非企业策略不允许），已用最小 manifest + ASCII 路径对比确认是环境限制而非扩展缺陷。用户侧真实 Chrome 加载路径未自动化验证。
+
 ## v3.2.0 (2026-08-31)
 
 ### 新增

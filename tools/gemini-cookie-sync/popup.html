@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemini Cookie Push</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      width: 420px; margin: 0; padding: 14px;
+      background: Canvas; color: CanvasText;
+    }
+    h1 { font-size: 16px; margin: 0 0 6px; }
+    p.hint { font-size: 12px; line-height: 1.5; margin: 4px 0 10px; opacity: .75; }
+    .row { display: flex; gap: 8px; }
+    button {
+      flex: 1; padding: 9px 10px; margin-top: 8px; border: 0; border-radius: 8px;
+      cursor: pointer; font-size: 13px;
+      background: color-mix(in srgb, CanvasText 10%, Canvas); color: CanvasText;
+    }
+    button.primary { background: #1769e0; color: #fff; }
+    button:disabled { opacity: .55; cursor: wait; }
+    #status {
+      white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 8px;
+      padding: 10px; margin-top: 10px; font-size: 12px; line-height: 1.55;
+      background: color-mix(in srgb, CanvasText 7%, Canvas);
+      min-height: 40px; max-height: 230px; overflow-y: auto;
+    }
+    .warn { color: #b34800; } .ok { color: #17823b; }
+    details { margin-top: 10px; font-size: 12px; }
+    summary { cursor: pointer; opacity: .8; }
+    label { display: block; margin: 8px 0 3px; font-size: 12px; opacity: .8; }
+    input {
+      width: 100%; box-sizing: border-box; padding: 7px 8px; font-size: 12px;
+      border: 1px solid color-mix(in srgb, CanvasText 25%, Canvas);
+      border-radius: 6px; background: Canvas; color: CanvasText;
+    }
+    code { direction: ltr; unicode-bidi: embed; }
+  </style>
+</head>
+<body>
+  <h1>Gemini Cookie Push</h1>
+  <p class="hint">
+    用 <code>chrome.cookies</code> 读取登录态，<strong>包含 HttpOnly</strong>
+    （<code>SAPISID</code> / <code>__Secure-1PSID</code> 等控制台里拿不到的都在这里）。
+    推送只发送 Cookie 与少量元数据，不发送其它浏览数据。
+  </p>
+
+  <div class="row">
+    <button id="inspect" type="button">检查会话</button>
+    <button id="copy" type="button">复制到剪贴板</button>
+  </div>
+  <button id="push" class="primary" type="button">一键推送到服务器</button>
+
+  <p id="status">准备就绪。先在 Gemini 里登录，再点「检查会话」。</p>
+
+  <details id="settings">
+    <summary>服务器设置</summary>
+    <label for="server">服务器地址（如 https://geminiapi.example.xyz）</label>
+    <input id="server" type="text" placeholder="https://..." autocomplete="off" spellcheck="false">
+    <label for="token">推送令牌 cookie_push_token</label>
+    <input id="token" type="password" placeholder="在服务端 config.json 里设置" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <button id="save" type="button">保存并授权该域名</button>
+      <button id="test" type="button">测试连通</button>
+    </div>
+  </details>
+
+  <script src="popup.js"></script>
+</body>
+</html>

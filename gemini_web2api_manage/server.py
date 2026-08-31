@@ -70,6 +70,37 @@ _MODEL_FIELD_RE = re.compile(r'("model"[ \t]*:[ \t]*)(?:"(?:[^"\\]|\\.)*"|null)'
 _GENERATION_OBJECTS = {"chat.completion", "chat.completion.chunk",
                        "response", "text-completion"}
 
+# —— Cookie 推送限流（内存滑窗，重启即清零，够用）——
+_PUSH_FAILS = {}
+_PUSH_FAIL_LIMIT = 8
+_PUSH_WINDOW_SEC = 300
+_PUSH_MAX_BODY = 256 * 1024
+
+
+def _client_ip(handler) -> str:
+    try:
+        return handler.client_address[0] or "?"
+    except Exception:
+        return "?"
+
+
+def _push_throttled(ip: str) -> bool:
+    now = time.time()
+    hits = [t for t in _PUSH_FAILS.get(ip, []) if now - t < _PUSH_WINDOW_SEC]
+    if hits:
+        _PUSH_FAILS[ip] = hits
+    else:
+        _PUSH_FAILS.pop(ip, None)
+    return len(hits) >= _PUSH_FAIL_LIMIT
+
+
+def _push_note_fail(ip: str) -> None:
+    _PUSH_FAILS.setdefault(ip, []).append(time.time())
+
+
+def _push_clear_fails(ip: str) -> None:
+    _PUSH_FAILS.pop(ip, None)
+
 
 def _estimate_usage(prompt_chars: int, response_chars: int) -> dict:
     """估算 token 用量（官网响应不提供真实计数，已 2026-08-31 实测确认）。
@@ -361,6 +392,12 @@ class GeminiHandler(UpstreamGeminiHandler):
             parsed = urlparse(self.path)
             path = parsed.path
 
+            # 一键推送 Cookie：走独立令牌鉴权，不依赖管理台会话 Cookie
+            # （扩展是 chrome-extension:// 源，跳域携带凭据会被浏览器 CORS 禁止）。
+            if path == "/admin/api/cookie-push":
+                self._handle_cookie_push()
+                return
+
             # Only read the body for admin routes. For all other paths we must
             # leave the stream untouched so the upstream handler can read it
             # itself — reading here would consume the body and make upstream
@@ -402,6 +439,92 @@ class GeminiHandler(UpstreamGeminiHandler):
                 pass
 
     # ─── Admin API handlers ───────────────────────────────────────────────
+
+    def _handle_cookie_push(self):
+        """`POST /admin/api/cookie-push` —— 浏览器扩展一键推送 Cookie。
+
+        安全设计：
+          * 未配置 `cookie_push_token` 时返回 404，与“该端点不存在”不可区分；
+          * 令牌用 `hmac.compare_digest` 常量时间比较；
+          * 按来源 IP 对失败尝试滑窗限流；
+          * 响应只回条数与存在性，**绝不回显 cookie 明文**。
+        """
+        import hmac
+        from gemini_web2api.gemini import log
+        from .cookie_ingest import normalize_cookie_input, apply_cookie, CookieApplyError
+
+        ip = _client_ip(self)
+        token = (CONFIG.get("cookie_push_token") or "").strip()
+        if not token:
+            # 功能未启用：表现得跟没有这个路由一样
+            self.send_json({"error": "not found"}, 404)
+            return
+        if _push_throttled(ip):
+            self.send_json({"error": {"message": "too many failed attempts, retry later"}}, 429)
+            return
+
+        supplied = (self.headers.get("X-Cookie-Push-Token")
+                    or self.headers.get("X-Push-Token") or "").strip()
+        if not supplied:
+            auth = self.headers.get("Authorization", "") or ""
+            if auth.lower().startswith("bearer "):
+                supplied = auth[7:].strip()
+        if not supplied or not hmac.compare_digest(supplied, token):
+            _push_note_fail(ip)
+            self.send_json({"error": {"message": "invalid push token"}}, 401)
+            return
+
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+        except ValueError:
+            length = 0
+        if length <= 0:
+            self.send_json({"error": {"message": "empty body"}}, 400)
+            return
+        if length > _PUSH_MAX_BODY:
+            self.send_json({"error": {"message": "payload too large"}}, 413)
+            return
+        body = self.rfile.read(length)
+
+        req = self._parse_body(body)
+        if req is None:
+            self.send_json({"error": {"message": "invalid JSON"}}, 400)
+            return
+
+        raw = req.get("cookie") or req.get("cookie_string") or ""
+        if not isinstance(raw, str):
+            raw = str(raw)
+        cookie_str, extras = normalize_cookie_input(raw)
+        # 显式字段优先于从文本里抽出的值
+        for key in ("sapisid", "xsrf_token", "gemini_bl"):
+            val = req.get(key)
+            if isinstance(val, str) and val.strip():
+                extras[key] = val.strip()
+        if req.get("auth_user") not in (None, ""):
+            try:
+                extras["auth_user"] = int(req["auth_user"])
+            except (TypeError, ValueError):
+                pass
+
+        if not cookie_str:
+            self.send_json({"error": {"message": (
+                "cookie 无法解析：请粘贴完整 cookie 串、Copy as cURL 或 " "gemini-auth.json 内容")}}, 400)
+            return
+
+        try:
+            result = apply_cookie(cookie_str, extras, label=req.get("label") or "push")
+        except CookieApplyError as e:
+            self.send_json({"error": {"message": str(e)}}, 400)
+            return
+        except Exception as e:
+            log(f"cookie-push apply failed: {type(e).__name__}")
+            self.send_json({"error": {"message": f"apply failed: {e}"}}, 500)
+            return
+
+        _push_clear_fails(ip)
+        log(f"cookie-push ok from {ip}: {result['cookie_count']} cookies, "
+            f"sapisid={result['has_sapisid']}, applied={sorted(result['applied'])}")
+        self.send_json(result)
 
     def do_DELETE(self):
         try:
@@ -589,6 +712,10 @@ class GeminiHandler(UpstreamGeminiHandler):
             return
         try:
             updated = save_config(CONFIG, req)
+        except ValueError as e:
+            # 配置值本身不合法（如推送令牌太短）：400 而不是 500
+            self.send_json({"error": {"message": str(e)}}, 400)
+            return
         except OSError as e:
             self.send_json(
                 {"error": {"message": f"save config failed: {e}"}}, 500

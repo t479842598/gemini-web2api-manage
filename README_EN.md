@@ -329,6 +329,66 @@ SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx
 python -m gemini_web2api_manage --cookie-file ./cookie.txt
 ```
 
+### One-click Cookie acquisition (recommended)
+
+The cookies that matter for auth are all **HttpOnly** (`SAPISID`,
+`__Secure-1PSID`, `SNlM0e`), so `document.cookie` in the page console
+**cannot read them at all**, and copying rows one by one out of Chrome's
+"Application → Cookies" panel into a `k=v; k=v` string is error-prone.
+Two working paths:
+
+#### Path A: extension one-click push (best when the server is remote)
+
+The bundled extension at `tools/gemini-cookie-sync/` reads the full cookie set
+including HttpOnly via `chrome.cookies.getAll()` and **pushes it straight to the
+server — effective immediately, no restart, no config file editing**.
+
+```text
+1. chrome://extensions → enable Developer mode → Load unpacked → pick tools/gemini-cookie-sync
+2. Enable a push token on the server (below)
+3. In the extension, fill server URL + token → Save & grant origin
+4. Click "Push to server"
+```
+
+Enable the push token (when empty the endpoint is fully off and returns 404,
+indistinguishable from "route does not exist"):
+
+```bash
+COOKIE_PUSH_TOKEN="$(openssl rand -hex 24)"
+```
+
+Tokens shorter than 16 characters are rejected. Setting it back to empty
+disables the feature; changing it invalidates the old token immediately. The
+endpoint uses constant-time comparison and per-IP sliding-window rate limiting
+(8 failures within 5 minutes → 429).
+
+#### Path B: no extension — paste Copy as cURL
+
+1. Open `https://gemini.google.com/app` while signed in
+2. F12 → **Network** → pick any request to `gemini.google.com`
+3. Right-click → **Copy** → **Copy as cURL**
+4. In the admin console under "Config → Cookie", paste the whole thing as-is → Save
+
+The server auto-detects and normalises four input shapes (so the **React
+frontend needs no change**):
+
+| Format | Source |
+|---|---|
+| Raw `SID=...; SAPISID=...` | Manual, or the extension's "Copy to clipboard" |
+| `curl '...' -b '...'` / `-H 'Cookie: ...'` | DevTools Copy as cURL (both bash and cmd line-continuation styles) |
+| `{"cookie": "...", "auth_user": 1, ...}` | The extension's `gemini-auth.json` |
+| `Cookie: ...` or a whole header block | DevTools Headers pane |
+
+When JSON is pasted, the accompanying `auth_user` / `xsrf_token` / `gemini_bl`
+values are applied too.
+
+> **Security**: a cookie string is equivalent to your Google session. Server logs
+> and API responses only report cookie counts and field presence — never the raw
+> values. Use HTTPS only in production.
+
+See [tools/gemini-cookie-sync/README.md](tools/gemini-cookie-sync/README.md)
+for extension permissions and troubleshooting.
+
 ### Proxy
 
 HTTP/HTTPS:

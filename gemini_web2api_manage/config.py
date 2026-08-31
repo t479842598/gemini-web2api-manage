@@ -36,6 +36,9 @@ MANAGE_DEFAULTS = {
     "browser_profile": {},
     # 是否把官网回报的真实服务模型透出到响应（关闭则只回显请求的模型名）。
     "expose_served_model": True,
+    # 一键推送 Cookie 的令牌。为空（默认）时 /admin/api/cookie-push 完全关闭，
+    # 返回 404 且与“该端点不存在”不可区分 —— 不在公网凭空多一个写入口。
+    "cookie_push_token": None,
 }
 
 for key, value in MANAGE_DEFAULTS.items():
@@ -75,6 +78,7 @@ def apply_env_config() -> dict:
         "gemini_base_url": "GEMINI_BASE_URL",
         "xsrf_token": "XSRF_TOKEN",
         "gemini_hl": "GEMINI_HL",
+        "cookie_push_token": "COOKIE_PUSH_TOKEN",
     }
     for config_key, env_key in text_fields.items():
         value = os.environ.get(env_key)

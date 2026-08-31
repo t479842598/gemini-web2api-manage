@@ -182,6 +182,8 @@ def admin_config_payload(config: dict) -> dict:
         "gemini_hl": config.get("gemini_hl") or "en",
         "bl_refresh_sec": config.get("bl_refresh_sec") or 21600,
         "expose_served_model": bool(config.get("expose_served_model", True)),
+        # 只回显“是否已设置”，绝不回显令牌明文
+        "cookie_push_token_set": bool(config.get("cookie_push_token")),
         "browser_profile": config.get("browser_profile") or {},
         "temporary_chats": bool(config.get("temporary_chats")),
         "force_non_stream": bool(config.get("force_non_stream")),
@@ -404,10 +406,32 @@ def cookie_status(config: dict) -> dict:
     }
 
 
+def _normalize_cookie_text(content):
+    """把用户粘贴的内容归一为纯 cookie 串。
+
+    放在服务端而不是 React 前端，是为了让已构建的管理台产物不改也能直接粘
+    cURL / gemini-auth.json / 裸串 / `Cookie:` 头。解析失败时**原样返回**，
+    保证不比升级前更差（上游 `load_cookie()` 自己还认 JSON 与裸串）。
+    返回 (clean_text, extras)。
+    """
+    text = str(content or "").strip()
+    if not text:
+        return "", {}
+    try:
+        from .cookie_ingest import normalize_cookie_input
+        cookie, extras = normalize_cookie_input(text)
+        if cookie:
+            return cookie, extras
+    except Exception:
+        pass
+    return text, {}
+
+
 def write_cookie_content(config: dict, content: str) -> str:
     target = Path(config.get("cookie_file") or cookie_content_path())
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content.strip() + "\n", encoding="utf-8")
+    clean, _extras = _normalize_cookie_text(content)
+    target.write_text(clean.strip() + "\n", encoding="utf-8")
     return str(target)
 
 
@@ -427,7 +451,7 @@ def write_cookie_contents(contents: list) -> list:
     root = cookies_dir()
     index = _next_cookie_index(root)
     for content in contents:
-        value = str(content or "").strip()
+        value, _extras = _normalize_cookie_text(content)
         if not value:
             continue
         target = root / f"cookie_{index}.txt"
@@ -456,7 +480,7 @@ def apply_cookie_items(data: dict, items: list) -> list:
         if not isinstance(raw, dict):
             continue
         path = str(raw.get("path") or "").strip()
-        content = str(raw.get("content") or "").strip()
+        content, _extras = _normalize_cookie_text(raw.get("content"))
         if content:
             if path and path in old_files and path not in seen:
                 target = Path(path)
@@ -503,9 +527,32 @@ def save_config(current_config: dict, updates: dict) -> dict:
         "gemini_hl",
         "bl_refresh_sec",
         "expose_served_model",
+        "cookie_push_token",
         "browser_profile",
     }
     data = read_config(current_config)
+
+    # 粘贴 gemini-auth.json 时顺带应用随附的 auth_user / xsrf_token / gemini_bl，
+    # 否则用户还得手工改这四个键 —— 那正是本特性要消灭的手工环节。
+    # 显式传入的同名字段优先（不覆盖）。
+    try:
+        _texts = []
+        for key in ("cookie_content",):
+            if isinstance(updates.get(key), str):
+                _texts.append(updates[key])
+        if isinstance(updates.get("cookie_contents"), list):
+            _texts.extend(x for x in updates["cookie_contents"] if isinstance(x, str))
+        if isinstance(updates.get("cookie_items"), list):
+            for item in updates["cookie_items"]:
+                if isinstance(item, dict) and isinstance(item.get("content"), str):
+                    _texts.append(item["content"])
+        for _t in _texts:
+            _clean, _extras = _normalize_cookie_text(_t)
+            for _k in ("auth_user", "xsrf_token", "gemini_bl"):
+                if _k not in updates and _extras.get(_k) not in (None, ""):
+                    updates[_k] = _extras[_k]
+    except Exception:
+        pass
 
     # ── Cookie snapshot protocol (frontend sends the full cookie_items list) ──
     cookie_items = updates.get("cookie_items")
@@ -575,6 +622,13 @@ def save_config(current_config: dict, updates: dict) -> dict:
             continue
         if key == "gemini_hl":
             data[key] = (str(value).strip() if value else None) or "en"
+            continue
+        if key == "cookie_push_token":
+            # 空串表示关闭该功能；非空时太短的令牌直接拒绝，避免误设弱口令
+            text = str(value).strip() if value not in (None, "") else ""
+            if text and len(text) < 16:
+                raise ValueError("cookie_push_token 长度不得少于 16 字符")
+            data[key] = text or None
             continue
         if key == "admin_password" and value in ("", None):
             continue

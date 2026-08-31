@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Gemini Cookie Push (gemini-web2api-manage)",
+  "version": "1.0",
+  "description": "一键读取含 HttpOnly 的完整 Gemini 登录 Cookie，直接推送到 gemini-web2api-manage，或复制到剪贴板粘贴。",
+  "permissions": [
+    "cookies",
+    "tabs",
+    "scripting",
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "https://accounts.google.com/*",
+    "https://www.google.com/*"
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "Gemini Cookie Push",
+    "default_popup": "popup.html"
+  }
+}

@@ -403,6 +403,63 @@ SID=xxx; HSID=xxx; SSID=xxx; APISID=xxx; SAPISID=xxx; __Secure-1PSID=xxx
 python -m gemini_web2api_manage --cookie-file ./cookie.txt
 ```
 
+### 一键获取 Cookie（推荐）
+
+关键鉴权 cookie 全是 **HttpOnly**（`SAPISID`、`__Secure-1PSID`、`SNlM0e`），
+所以在网页控制台跑 `document.cookie` **根本拿不到**，从 Chrome「Application → Cookies」
+面板一条条手工拼 `k=v; k=v` 也极易出错。本项目提供两条可用路径：
+
+#### 路径 A：扩展一键推送（服务在远程机器时首选）
+
+自带扩展 `tools/gemini-cookie-sync/`，用 `chrome.cookies.getAll()` 读取含 HttpOnly
+的完整 cookie，**点一下直接推送到服务器并立即生效**，无需重启、无需碰配置文件。
+
+```text
+1. chrome://extensions → 开启开发者模式 → 加载已解压的扩展程序 → 选 tools/gemini-cookie-sync
+2. 服务端启用推送令牌（下面）
+3. 扩展里填服务地址与令牌 → 保存并授权该域名
+4. 点「一键推送到服务器」
+```
+
+启用推送令牌（为空时端点完全关闭，返回 404 且与“端点不存在”不可区分）：
+
+```bash
+# 环境变量方式
+COOKIE_PUSH_TOKEN="$(openssl rand -hex 24)"
+
+# 或管理台 API（需先登录）
+curl -X POST https://<你的域名>/admin/api/config \
+  -H 'Content-Type: application/json' -b "gw_admin=<会话cookie>" \
+  -d '{"cookie_push_token":"<至少 16 字符的随机串>"}'
+```
+
+令牌少于 16 字符会被拒绝；改回空串即关闭功能，改令牌即刻作废旧令牌。
+端点采用常量时间比较与按 IP 滑窗限流（5 分钟内 8 次失败即 429）。
+
+#### 路径 B：不装扩展，粘 Copy as cURL
+
+1. 打开 `https://gemini.google.com/app` 并确保已登录
+2. F12 → **Network** → 任选一条发往 `gemini.google.com` 的请求
+3. 右键 → **Copy** → **Copy as cURL**
+4. 管理台「配置 → Cookie」把整段 cURL **原样粘进输入框** → 保存配置
+
+服务端自动识别并归一四种输入（因此 **React 前端无需改动**）：
+
+| 格式 | 来源 |
+|---|---|
+| 裸串 `SID=...; SAPISID=...` | 手工或扩展「复制到剪贴板」 |
+| `curl '...' -b '...'` / `-H 'Cookie: ...'` | DevTools Copy as cURL（bash 与 cmd 两种续行风格均支持） |
+| `{"cookie": "...", "auth_user": 1, ...}` | 扩展导出的 `gemini-auth.json` |
+| `Cookie: ...` 或整块请求头 | DevTools Headers 区 |
+
+粘贴 JSON 时，随带的 `auth_user` / `xsrf_token` / `gemini_bl` 会一并应用。
+
+> **安全**：Cookie 串等同 Google 账号登录态。服务端日志与接口响应只记录条数与
+> 关键字段存在性，绝不回显明文；生产请仅通过 HTTPS 使用推送。
+
+扩展的权限说明、故障排查与更多细节见
+[tools/gemini-cookie-sync/README.md](tools/gemini-cookie-sync/README.md)。
+
 ### 代理
 
 支持 HTTP/HTTPS 代理：
