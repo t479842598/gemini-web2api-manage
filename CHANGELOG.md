@@ -1,5 +1,27 @@
 # 更新日志
 
+## v3.5.1 (2026-09-16)
+
+### 新增
+
+- **补 `gemini-3.1-flash-lite`**：官方 API 更早的 lite 档端点命名，与 `gemini-flash-lite` / `gemini-3.5-flash-lite` 同为 mode=6。模型数 11 → 12，`/v1/models` 与 `resolve_model` 均支持。
+
+### 未采纳（附理由）
+
+- **未加入 `gemini-3.8-live` / `gemini-3.8-live-extended-thinking`**：这两个是官方 **Live API**（双向实时语音/视频）专用端点。本项目走的是网页端 `BardChatUi/StreamGenerate` 文本协议，无法路由到 Live 端点 —— 加进 `/v1/models` 只会造出不可用的幽灵名。同理未加 `*-image`（Nano Banana 图像系）与 `*-tts`/`*-transcribe` 语音端点：本项目当前不支持图像生成与语音输出。
+
+### 运维
+
+- **生产启用 API Key 鉴权**（此前 `api_keys` 为空、`/v1*` 无鉴权）。支持的传递方式：`Authorization: Bearer <key>`、`x-api-key`、`x-goog-api-key`、`?key=<key>`（Gemini CLI 风格）。`/health` 与 `/admin/*` 不受影响。
+- 生产 BL 持续自动跟随：实测已刷至 `20260914.08_p0`，与官网页面一致。
+
+### 验证
+
+- 生产 `/v1/models` 12 个模型可显示；抽样 5 个模型全部正常返回。
+- 上下文实测正常：多轮记忆正确（记住姓名+年龄）、system prompt 生效（法语指令 → `Bonjour`）、11649 字符长上下文正常、`/v1/responses` 与 Google `generateContent` 正常。
+- 解析 13/13、推送端到端 21/21。
+- 说明：本机出口 IP 访问生产域名时被 **Cloudflare 按 UA 拦截**（`error code: 1010`，仅针对 `python-urllib` 的 UA；curl/Chrome UA 均 200）。属 CF bot 防护，非服务故障；若客户端 UA 异常可能遇到同样情况。
+
 ## v3.5.0 (2026-09-08)
 
 ### 新增

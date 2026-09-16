@@ -701,6 +701,9 @@ _MODEL_CATALOG = {
     "gemini-3.5-flash-lite": (6, 4,
         "官方 API 的 lite 档命名，与 gemini-flash-lite 同为 mode=6。"
         f"{_ANON_CAP_NOTE}"),
+    "gemini-3.1-flash-lite": (6, 4,
+        "官方 API 更早的 lite 档命名，同为 mode=6。"
+        f"{_ANON_CAP_NOTE}"),
     "gemini-flash-lite": (6, 4,
         f"轻量档（mode=6）；匿名实测唯一真实可用的模型即为此档（3.5 Flash-Lite）"),
 }
