@@ -306,6 +306,37 @@ class GeminiHandler(UpstreamGeminiHandler):
         self.send_header("Access-Control-Allow-Headers", "*")
         self.end_headers()
 
+    # ── 交给上游前的请求规范化（修上游缺陷）─────────────────────────
+    def _normalize_upstream_request(self):
+        """把 `?key=` 提升为 `Authorization` 并剥离 query。
+
+        上游 `do_GET`/`do_POST` 用 `self.path == "/v1/models"` 这类**精确比较**
+        做路由，带 query 就不匹配（→ 404）；但同一份代码里的 `_authorized()`
+        又专门支持 `?key=<key>`（Gemini CLI 风格）。两者矛盾，导致
+        **OpenAI 端点上 `?key=` 传法实际不可用**；而 Google 原生端点因为用
+        `"...:generateContent" in self.path` 与 `[^:?]+` 正则反而能用。
+
+        这里在交给上游之前统一处理：提取 key 写进 Authorization header，
+        再把 query 剥掉。上游除 `?key=` 外不读其它 query（已确认），故安全。
+        """
+        path = getattr(self, "path", "") or ""
+        if "?" not in path:
+            return
+        base, _, qs = path.partition("?")
+        if not base.startswith(("/v1", "/v1beta")):
+            return
+        if not (self.headers.get("Authorization")
+                or self.headers.get("x-api-key")
+                or self.headers.get("x-goog-api-key")):
+            for pair in qs.split("&"):
+                if pair.startswith("key="):
+                    from urllib.parse import unquote
+                    key = unquote(pair[4:])
+                    if key:
+                        self.headers["Authorization"] = f"Bearer {key}"
+                    break
+        self.path = base
+
     def do_GET(self):
         try:
             parsed = urlparse(self.path)
@@ -394,6 +425,7 @@ class GeminiHandler(UpstreamGeminiHandler):
                 return
 
             # Fall through to upstream handler
+            self._normalize_upstream_request()
             super().do_GET()
 
         except (BrokenPipeError, ConnectionResetError):
@@ -437,6 +469,7 @@ class GeminiHandler(UpstreamGeminiHandler):
                 return
 
             # Fall through to upstream handler (body not yet consumed)
+            self._normalize_upstream_request()
             self._run_upstream_post()
             return
 

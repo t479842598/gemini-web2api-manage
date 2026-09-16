@@ -1,5 +1,17 @@
 # 更新日志
 
+## v3.5.2 (2026-09-16)
+
+### 修复
+
+- **修复 `?key=<key>` 传法在 OpenAI 端点上完全不可用**。上游 `do_GET`/`do_POST` 用 `self.path == "/v1/models"` 这种**精确比较**做路由，带 query 就不匹配（→ 404）；但同一份代码里的 `_authorized()` 又专门实现了 `?key=` 解析（Gemini CLI 风格）。两者自相矛盾，导致 `/v1/models?key=` 与 `/v1/chat/completions?key=` 一律 404（Google 原生端点因用 `in self.path` 与 `[^:?]+` 正则反而正常）。
+  - 修法（manage 层，不改 submodule）：在交给上游之前规范化请求 —— 提取 `key=` 提升为 `Authorization: Bearer`，再剥掉 query。已确认上游除 `?key=` 外不读任何其它 query 参数，故剥离安全；`/v1beta/models/([^:?]+)` 正则本就排除 `?`。
+  - 该缺陷在 v3.5.1 启用 API Key 鉴权后才暴露出来（此前无鉴权，`?key=` 同样 404）。
+
+### 验证
+
+- 本地：`GET /v1/models?key=` → 200、`POST /v1/chat/completions?key=` → 200；`Bearer` / `x-api-key` / `x-goog-api-key` 均 200；无 key 与错 key → 401；`/admin/api/logs?limit=3`、`/admin/api/stats?range=1d` 等**带 query 的管理台路由未被破坏**（回退路径才规范化，admin 分支不受影响）。
+
 ## v3.5.1 (2026-09-16)
 
 ### 新增
