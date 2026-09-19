@@ -1,5 +1,42 @@
 # 更新日志
 
+## v3.5.3 (2026-09-19)
+
+### 变更
+
+- **按 2026-09-19 官网抓包基线二次对齐协议**。用本机 Chrome 153.0.8010.50 headless + CDP 重抓 `gemini.google.com` 的 `StreamGenerate` 真实请求，与 `protocol.py` 逐字段比对，发现并修掉 5 处**静默漂移**（不报错、只让指纹越来越不像浏览器）：
+  - **画像常量过期**：`sec-ch-ua-full-version` 发的是 `153.0.8010.12`，实测当前稳定版为 `153.0.8010.50`；`sec-ch-ua-platform-version` 发 `26.7.0`，实测 macOS 为 `27.0.0`；`sec-ch-ua` 的品牌写法与顺序也不对（旧版写 `"Not/A)Brand";v="8", "Chromium";v="153", "Google Chrome";v="153"`，官网实测为 `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"`）。
+  - **漏发官网明确携带的头**：`x-browser-channel` / `x-browser-copyright` / `x-browser-year`、`sec-fetch-dest|mode|site`、`priority`。
+  - **Referer 形态不对**：我们发 `https://gemini.google.com/app`，官网实测是**裸域名** `https://gemini.google.com/`（不带 `/app`、不带 account prefix）。
+  - **payload 内层数组长度 97 → 99**：官网从 08-31 的 97 变成 99，尾部多出 `inner[97]=null`、`inner[98]=1`。
+  - **`_request_uuid()` fallback 未回写线程局部**：未经 `_build_payload` 直接取头的路径会另生成一个 UUID，导致 `x-goog-ext-525005358-jspb` 与 payload `inner[59]` 不一致（官网两者必相同）。
+- **修正一条自己的误判**：初次比对时只看了 CDP 的 `requestWillBeSent`（开发者设置头），据此删掉了 `Origin`/`Accept`/`Accept-Language`；改看 `requestWillBeSentExtraInfo`（网络层完整头，含浏览器自动加的）后确认官网**确实发**这三个头，已回滚。`accept-language` 实测为 `zh-CN,zh;q=0.9`（无 `en` 项），画像默认值随之修正。
+- **未采纳（附理由）**：官网另带 `x-browser-validation`（形如 `KBOSoI/ydlNGP7OTQlJKEOIWpXE=`，疑为画像字段校验和）。生成算法未逆向出来，且实测缺失不影响请求成功 —— **填一个假的校验和比不发更可疑**，故本层不伪造。
+
+### 新增
+
+- **可重复的协议对齐校验工具**：
+  - `tools/capture_baseline.mjs`：CDP 抓一份官网基线（URL / 全部请求头 / POST body / 响应体 + 解出的 `served_model`、会话 ID）。
+  - `tools/align_check.py`：把「我们实际会发出的请求」与基线逐字段比对，9 项断言（头集合覆盖 / 无多发头 / 共有头取值 / UA 形态 / URL query 与 path / payload 长度 / payload 逐下标 / form 字段）。退出码非 0 即漂移，并区分「协议漂移」与「请求参数差异」（语言 / mode / think，由 `gemini_hl` 与模型档位决定，不算漂移）。
+  - **为什么需要**：这类漂移不报错，只会让指纹悄悄失真；08-31 那份基线到 09-19 已经漂了 5 处，靠人肉 diff 才发现。
+- **实测确认官网模型菜单只有三项**：`3.5 Flash-Lite` / `3.6 Flash` / `3.1 Pro`（+ 一条“登录即可使用所有模型”）。我们目录里的 `3.7-flash`、`3.8-flash`、`3.5-flash` 在网页端并无独立入口 —— 官方 API 的版本号 ≠ 网页端可选档位。
+- **复核 `bl` 分片假设（这次不成立）**：08-31 曾观测到官网 `bl` 按会话 A/B 分片下发（同一时刻两个值）；本次连抓 5 次均为同一个 `20260917.13_p0`，未见分片。定期刷新仍保留（几天一发是事实），但“A/B 分片”这条按本次观测不再成立，已在代码注释里降级为历史观测。
+
+### 修复
+
+- **`gemini-3.7-flash` 描述丢掉了“别名”字样**：09-16 重写描述时把 `属别名而非独立模型` 改没了，而回归脚本仍在断言它，导致 `_regress_03_01.py` 出现一处长期 FAIL。现已写回并补充“官网模式菜单里只列三项”这一实测依据。
+
+### 验证
+
+- `tools/align_check.py /tmp/gemini_baseline.json` → **9/9 PASS**（基线为 2026-09-19 实测抓包，官网 served=`3.5 Flash-Lite`）。
+- `_regress_03_01.py` → **17/17 PASS**：三类端点 × 流式/非流式、`_reqid` 200 次全唯一、并发 8 路 3.6s 全成功且会话 ID 8/8 不串味、内容一一对应、SSE 不丢块、`usage` 自洽、管理台路由正常。
+- `python -m compileall gemini_web2api_manage tools/*.py` 通过。
+- 测试期间起的 headless Chrome（含 CDP 9222）与本地 18099 服务已全部关闭，`pgrep` 确认无残留。
+
+### 运维
+
+- 本机需挂代理才能直连 `gemini.google.com`（直连 `000`、经 `127.0.0.1:7897` 得 `200`），本地起服务加 `--proxy http://127.0.0.1:7897`。
+
 ## v3.5.2 (2026-09-16)
 
 ### 修复

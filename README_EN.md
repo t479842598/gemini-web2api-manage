@@ -233,6 +233,23 @@ Since v3.2.0 generation responses (including streaming chunks) report the model 
 | `gemini_conversation_id` / `gemini_response_id` | Upstream conversation / response IDs |
 | `gemini_region` / `gemini_region_code` | Egress IP region as seen by Google (useful for regional rate-limit debugging) |
 
+### Protocol drift self-check
+
+Google's frontend changes the request shape (profile version, header set, payload indices) over time,
+and such drift **never errors** — it just quietly makes the fingerprint less browser-like. Two
+repeatable tools ship with the repo:
+
+```bash
+# 1) Capture a baseline from the real site (needs a headless Chrome with CDP, see the web-browser skill)
+node tools/capture_baseline.mjs /tmp/gemini_baseline.json
+# 2) Diff the request we would actually send against that baseline (9 assertions; non-zero exit = drift)
+python3 tools/align_check.py /tmp/gemini_baseline.json
+```
+
+Always capture with CDP's `Network.requestWillBeSentExtraInfo` (full network-layer headers). Watching
+only `requestWillBeSent` misses browser-added headers such as `Origin` / `Accept` / `sec-fetch-*`,
+which caused one misjudgement already (see `CHANGELOG.md` v3.5.3).
+
 Notes:
 
 - All model keys are preserved, so existing clients keep working; `/v1/models` descriptions now state the anonymous limitation and Cookie dependency per tier.
@@ -303,15 +320,23 @@ The authoritative model list is returned by `GET /v1/models`. The current build 
 
 | Model | Description |
 |---|---|
-| `gemini-3.7-flash` | Latest general Flash route |
-| `gemini-3.6-flash` | General Flash route |
+| `gemini-3.8-flash` | Newest Flash published in the official API (no separate web entry; still the mode=1 route) |
+| `gemini-3.7-flash` | mode=1 tier alias, not a distinct model (same tier as 3.6/3.5) |
+| `gemini-3.6-flash` | General Flash route (visible in the web model menu) |
 | `gemini-3.5-flash` | Compatibility alias |
 | `gemini-3.5-flash-thinking` | Deep-thinking route |
-| `gemini-3.1-pro` | Pro route; usually requires a valid Cookie |
+| `gemini-3.1-pro` | Pro route; usually requires a valid Cookie (visible in the web model menu) |
 | `gemini-3.1-pro-enhanced` | Experimental enhanced Pro route |
 | `gemini-auto` | Automatic model selection |
 | `gemini-3.5-flash-thinking-lite` | Lightweight thinking route |
-| `gemini-flash-lite` | Fast lightweight route |
+| `gemini-3.5-flash-lite` | Official lite tier naming |
+| `gemini-3.1-flash-lite` | Older official lite tier naming |
+| `gemini-flash-lite` | Fast lightweight route (the only tier that actually serves anonymous traffic) |
+
+> Measured 2026-09-19: the anonymous web model menu only lists **3.5 Flash-Lite / 3.6 Flash / 3.1 Pro**.
+> Names such as `3.7-flash`, `3.8-flash` and `3.5-flash` are **official API version numbers**, not web
+> entries — requesting them still lands on the mode=1 tier. The requested name is a *tier intent*;
+> read the `served_model` field in the response for the model that actually served it.
 
 ## Cookie, proxy, and persistence
 

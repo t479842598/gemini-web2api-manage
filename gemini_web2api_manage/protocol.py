@@ -32,33 +32,43 @@ import gemini_web2api.gemini as _g
 from .config import CONFIG
 
 # ─── Chrome 浏览器画像（唯一维护点，随 Chrome 大版本只改这里）─────────────────
-# 来源：2026-08-31 本机 Chrome 152.0.7977.65 headless 抓包 + Google Version
-# History API 查得当前 stable 为 153.0.8010.12。默认固定最新稳定版；若官网开始
-# 校验画像与实际客户端不一致，把 BROWSER_PROFILE 整体降回 verified 的 152 即可，
-# 或在 config.json 里用 browser_profile 键覆盖，无需改代码。
+# 来源：2026-09-19 本机 Chrome 153.0.8010.50 headless + CDP 抓包（macOS 27.0）。
+# 复核方式：tools/capture_baseline.mjs 抓一份官网基线 → tools/align_check.py 比对。
+# 若官网开始校验画像与实际客户端不一致，把 BROWSER_PROFILE 整体降回上一份
+# verified 基线即可，或在 config.json 里用 browser_profile 键覆盖，无需改代码。
+#
+# 2026-09-19 修正（对比 08-31 那份）：full_version 153.0.8010.12 → 实测 .50；
+# platform_version 26.7.0 → 27.0.0；sec-ch-ua 的品牌写法与顺序改为官网实测的
+# `"Google Chrome";v="153", "Not_A Brand";v="8", "Chromium";v="153"`
+# （旧版写的是 `Not/A)Brand`，且把 Google Chrome 排在最后）。
 BROWSER_PROFILE = {
     "chrome_major": "153",
-    "chrome_full_version": "153.0.8010.12",
+    "chrome_full_version": "153.0.8010.50",
     # 注意：UA 里的版本只到大版本（Chrome 的 UA Reduction）
     "user_agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"
     ),
     "sec_ch_ua": (
-        '"Not/A)Brand";v="8", "Chromium";v="153", '
-        '"Google Chrome";v="153"'
+        '"Google Chrome";v="153", "Not_A Brand";v="8", '
+        '"Chromium";v="153"'
     ),
     "sec_ch_ua_full_version_list": (
-        '"Not/A)Brand";v="8.0.0.0", "Chromium";v="153.0.8010.12", '
-        '"Google Chrome";v="153.0.8010.12"'
+        '"Google Chrome";v="153.0.8010.50", "Not_A Brand";v="8.0.0.0", '
+        '"Chromium";v="153.0.8010.50"'
     ),
     "sec_ch_ua_platform": '"macOS"',
-    "sec_ch_ua_platform_version": '"26.7.0"',
+    "sec_ch_ua_platform_version": '"27.0.0"',
     "sec_ch_ua_arch": '"arm"',
     "sec_ch_ua_bitness": '"64"',
     "sec_ch_ua_model": '""',
     "sec_ch_ua_form_factors": '"Desktop"',
-    "accept_language": "zh-CN,zh;q=0.9,en;q=0.8",
+    # 官网网络层实测 accept-language 为 `zh-CN,zh;q=0.9`（不带 en 项）。
+    "accept_language": "zh-CN,zh;q=0.9",
+    # 官网显式携带的 Chrome 自述头（值随版本滚动，2026-09-19 实测）。
+    "browser_channel": "stable",
+    "browser_copyright": "Copyright 2026 Google LLC. All Rights Reserved.",
+    "browser_year": "2026",
 }
 
 # 官网真实请求里带的 Google 私有扩展头（含义未逆向，本层只对齐"存在性与结构"，
@@ -92,8 +102,16 @@ def _request_uuid() -> str:
     _build_headers，所以该值在 _build_payload 里生成并暂存，供
     _build_headers 复用 —— 官网正是同一个 UUID 同时出现在
     x-goog-ext-525005358-jspb 与 payload inner[59]。
+
+    fallback 路径（未经 _build_payload 直接取头）也必须写回 _tls，
+    否则同一请求内两处会拿到不同的 UUID（线上就是这个 bug）。
     """
-    return getattr(_tls, "uuid", None) or str(_uuid.uuid4()).upper()
+    existing = getattr(_tls, "uuid", None)
+    if existing:
+        return existing
+    value = str(_uuid.uuid4()).upper()
+    _tls.uuid = value
+    return value
 
 
 def _set_request_uuid(value: str) -> None:
@@ -195,26 +213,41 @@ def _build_headers() -> dict:
     # gemini_base_url 反代域名就会与实际目标不一致（反而更像伪造）。
     # Authorization 的 SAPISIDHASH 仍按上游原逻辑用真实 Google 域名计算，
     # 不在本层动 —— 带 Cookie 场景待实测后再定。
+    # 2026-09-19 网络层抓包（Network.requestWillBeSentExtraInfo，含浏览器自动加的头）
+    # 修正了上一版基于 requestWillBeSent 的误判：官网**确实发** Origin 与 Accept，
+    # 只是它们不在 CDP 的“开发者设置头”那一栏。accept-language 实测为
+    # `zh-CN,zh;q=0.9`（无 en 项）；Referer 是裸域名（不带 /app、不带 account prefix）。
     base = _base_url()
-    prefix = _g._account_prefix()
     headers["Origin"] = base
-    headers["Referer"] = f"{base}{prefix}/app"
+    headers["Referer"] = f"{base}/"
 
     headers["Accept"] = "*/*"
     headers["Accept-Language"] = p["accept_language"]
     headers["Content-Type"] = "application/x-www-form-urlencoded;charset=UTF-8"
     headers["User-Agent"] = p["user_agent"]
+    # Fetch 元数据头：同源 XHR 的固定形态，官网必带
+    headers["sec-fetch-dest"] = "empty"
+    headers["sec-fetch-mode"] = "cors"
+    headers["sec-fetch-site"] = "same-origin"
+    headers["priority"] = "u=1, i"
+    headers["x-browser-channel"] = p["browser_channel"]
+    headers["x-browser-copyright"] = p["browser_copyright"]
+    headers["x-browser-year"] = p["browser_year"]
     headers["sec-ch-ua"] = p["sec_ch_ua"]
-    headers["sec-ch-ua-mobile"] = "?0"
     headers["sec-ch-ua-platform"] = p["sec_ch_ua_platform"]
-    headers["sec-ch-ua-platform-version"] = p["sec_ch_ua_platform_version"]
-    headers["sec-ch-ua-arch"] = p["sec_ch_ua_arch"]
     headers["sec-ch-ua-bitness"] = p["sec_ch_ua_bitness"]
     headers["sec-ch-ua-model"] = p["sec_ch_ua_model"]
+    headers["sec-ch-ua-mobile"] = "?0"
+    headers["sec-ch-ua-wow64"] = "?0"
     headers["sec-ch-ua-form-factors"] = p["sec_ch_ua_form_factors"]
+    headers["sec-ch-ua-arch"] = p["sec_ch_ua_arch"]
+    headers["sec-ch-ua-platform-version"] = p["sec_ch_ua_platform_version"]
     headers["sec-ch-ua-full-version"] = p["chrome_full_version"]
     headers["sec-ch-ua-full-version-list"] = p["sec_ch_ua_full_version_list"]
-    headers["sec-ch-ua-wow64"] = "?0"
+
+    # 官网另带 x-browser-validation（形如 "KBOSoI/ydlNGP7OTQlJKEOIWpXE="，疑为
+    # 基于画像字段的校验和）。未逆向出生成算法，且实测缺失不影响请求成功，
+    # 故**不伪造** —— 填一个假的校验和比不发更可疑。
 
     # Google 私有扩展头：结构与官网一致，UUID 与本请求 payload inner[59] 同源
     ruuid = _request_uuid()
@@ -257,9 +290,10 @@ def _get_url() -> str:
 # ─── 3. Payload ────────────────────────────────────────────────────────────
 _orig_build_payload = _g._build_payload
 
-# 官网内层数组实测长度 97（上游写死 102，多出的尾部 null 目前不被校验，
+# 官网内层数组实测长度 99（上游写死 102，多出的尾部 null 目前不被校验，
 # 这里对齐以免 Google 将来加长度校验时踩雷）。
-_INNER_LEN = 97
+# 2026-09-19 抓包复核：从 08-31 观测的 97 变成 99，尾部多出 [97]=null、[98]=1。
+_INNER_LEN = 99
 
 
 def _build_payload(prompt, model_id, think_mode, file_refs=None, extra_fields=None) -> str:
@@ -296,6 +330,7 @@ def _build_payload(prompt, model_id, think_mode, file_refs=None, extra_fields=No
     inner[79] = model_id
     inner[91] = 0           # 上游未设置
     inner[96] = 0           # 上游未设置
+    inner[98] = 1           # 2026-09-19 官网实测尾部为 1（inner[97] 保持 null）
     if extra_fields:
         for k, v in extra_fields.items():
             inner[k] = v
@@ -681,7 +716,8 @@ _MODEL_CATALOG = {
         "官方 API 已发布的当前最新 Flash（2026-09-08 文档确认，排模型表首位）。"
         f"经网页端 mode=1 档请求；{_ROLL_NOTE}；{_ANON_CAP_NOTE}，需 Cookie"),
     "gemini-3.7-flash": (1, 4,
-        f"与 gemini-3.6/3.5 同为 mode=1 档位名（官方 API 独立端点，网页端同档）；"
+        "属 mode=1 档位别名而非独立模型（与 gemini-3.6/3.5 同档，官方 API 才是"
+        f"独立端点；官网模式菜单里也只列出 3.5 Flash-Lite / 3.6 Flash / 3.1 Pro）；"
         f"{_ROLL_NOTE}；{_ANON_CAP_NOTE}，需 Cookie 才可能真实路由"),
     "gemini-3.6-flash": (1, 4,
         f"mode=1 档位名（官方 API 独立端点）；{_ROLL_NOTE}；{_ANON_CAP_NOTE}"),

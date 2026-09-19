@@ -64,8 +64,11 @@ def main():
     if new_bl:
         CONFIG["gemini_bl"] = new_bl
 
-    # 官网版本号（bl）几天一发且按会话 A/B 分片下发，只在启动时取一次会越漂越远，
-    # 这里起守护线程定期跟随（失败保留旧值，不进请求关键路径）。
+    # 官网版本号（bl）几天一发，只在启动时取一次会越漂越远，这里起守护线程定期
+    # 跟随（失败保留旧值，不进请求关键路径）。
+    # 注：08-31 曾观测到同一时刻两个 bl 值（推测按会话 A/B 分片），但 2026-09-19
+    # 连抓 5 次均为同一个值，分片假设不成立 —— 定期刷新的理由是“几天一发”，
+    # 而不是分片。
     from gemini_web2api_manage import protocol as _protocol
     if _protocol.start_bl_refresher():
         print(f"  BL refresh: every {int(CONFIG.get('bl_refresh_sec') or 21600)}s")

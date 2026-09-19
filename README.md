@@ -264,6 +264,22 @@ Gemini 网页端是逆向接口。**实测（2026-08-31）证明：匿名模式�
 | `gemini_conversation_id` / `gemini_response_id` | 官网回报的会话 / 响应 ID |
 | `gemini_region` / `gemini_region_code` | 官网看到的出口 IP 归属地（排查区域限流用） |
 
+### 协议漂移自检
+
+官网请求形态（画像版本号、头集合、payload 下标）会随 Google 前端发版漂移，而这类漂移
+**不会报错**，只会让指纹悄悄失真。仓库提供两个可重复的工具：
+
+```bash
+# 1) 抓一份官网基线（需先起一个开着 CDP 的 headless Chrome，见 web-browser 技能）
+node tools/capture_baseline.mjs /tmp/gemini_baseline.json
+# 2) 把我们实际会发出的请求与基线逐字段比对（9 项断言，退出码非 0 即漂移）
+python3 tools/align_check.py /tmp/gemini_baseline.json
+```
+
+抓包务必用 CDP 的 `Network.requestWillBeSentExtraInfo`（网络层完整头）；只看
+`requestWillBeSent` 会漏掉浏览器自动加的 `Origin` / `Accept` / `sec-fetch-*` 等，
+曾据此误判过一次（详见 `CHANGELOG.md` v3.5.3）。
+
 行为说明：
 
 - 模型键名全部保留，不影响已有调用方；`/v1/models` 的 `description` 已标注各档位的匿名限制与 Cookie 依赖。
@@ -416,15 +432,22 @@ http://127.0.0.1:8081/v1
 
 | 模型 | 说明 |
 |---|---|
-| `gemini-3.7-flash` | 最新通用 Flash 模型 |
-| `gemini-3.6-flash` | 通用 Flash 模型 |
+| `gemini-3.8-flash` | 官方 API 已发布的当前最新 Flash（网页端无独立入口，仍走 mode=1 档） |
+| `gemini-3.7-flash` | mode=1 档位别名（非独立模型，与 3.6/3.5 同档） |
+| `gemini-3.6-flash` | 通用 Flash 模型（官网模式菜单可见项） |
 | `gemini-3.5-flash` | 兼容别名，映射到 Flash 路由 |
 | `gemini-3.5-flash-thinking` | 深度思考模式 |
-| `gemini-3.1-pro` | Pro 路由，通常需要有效 Cookie |
+| `gemini-3.1-pro` | Pro 路由，通常需要有效 Cookie（官网模式菜单可见项） |
 | `gemini-3.1-pro-enhanced` | 增强 Pro 实验路由 |
 | `gemini-auto` | 自动选择模型 |
 | `gemini-3.5-flash-thinking-lite` | 轻量思考模式 |
-| `gemini-flash-lite` | 快速轻量模型 |
+| `gemini-3.5-flash-lite` | 官方 lite 档命名 |
+| `gemini-3.1-flash-lite` | 官方更早的 lite 档命名 |
+| `gemini-flash-lite` | 快速轻量模型（匿名实测唯一真实可用的档位） |
+
+> 2026-09-19 实测：官网模式菜单（匿名）只列出 **3.5 Flash-Lite / 3.6 Flash / 3.1 Pro** 三项 ——
+> `3.7-flash`、`3.8-flash`、`3.5-flash` 等只是**官方 API 的版本号**，网页端没有对应入口，
+> 请求它们实际仍落到 mode=1 档。模型名是“档位意图”，真实服务版本请看响应 `served_model`。
 
 部分模型支持 `@think=N` 后缀调整思考深度：
 
